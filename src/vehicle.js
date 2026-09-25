@@ -29,7 +29,7 @@ export class Vehicle {
 
         this.wheelRadius = 0.42;
 
-        this.spawnPosition = new THREE.Vector3(0, 0, 0);
+        this.spawnPosition = new THREE.Vector3(0, 0, 25);
         this.spawnRotation = 0;
 
         this.createModel();
