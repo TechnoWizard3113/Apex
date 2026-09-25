@@ -4,12 +4,103 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Apex</title>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-    <div id="hud">
-        <div id="speed">0 km/h</div>
-        <div id="controls">WASD to drive · R to reset</div>
+    <div id="menu" class="screen">
+        <div class="menu-panel">
+            <div class="logo">APEX</div>
+            <div class="subtitle">BUILD. RACE. IMPROVE.</div>
+
+            <div class="menu-buttons">
+                <button id="playButton">PLAY</button>
+                <button id="buildButton">BUILD</button>
+                <button id="tracksButton">TRACKS</button>
+                <button id="leaderboardButton">LEADERBOARD</button>
+            </div>
+
+            <div class="menu-best">
+                <span>PERSONAL BEST</span>
+                <strong id="menuBest">--:---.---</strong>
+            </div>
+        </div>
+    </div>
+
+    <div id="trackSelect" class="screen hidden">
+        <div class="panel">
+            <h1>TRACKS</h1>
+
+            <button class="track-option" data-track="mountain">
+                <span>Mountain Run</span>
+                <small>Technical starter circuit</small>
+            </button>
+
+            <button class="track-option" data-track="speed">
+                <span>Speed Circuit</span>
+                <small>High speed test track</small>
+            </button>
+
+            <button id="trackBackButton">BACK</button>
+        </div>
+    </div>
+
+    <div id="leaderboard" class="screen hidden">
+        <div class="panel">
+            <h1>LEADERBOARD</h1>
+
+            <div id="leaderboardList"></div>
+
+            <button id="leaderboardBackButton">BACK</button>
+        </div>
+    </div>
+
+    <div id="builder" class="screen hidden">
+        <div class="builder-panel">
+            <div class="builder-title">TRACK BUILDER</div>
+
+            <div class="piece-buttons">
+                <button data-piece="straight">STRAIGHT</button>
+                <button data-piece="curveLeft">CURVE LEFT</button>
+                <button data-piece="curveRight">CURVE RIGHT</button>
+                <button data-piece="ramp">RAMP</button>
+                <button data-piece="bankLeft">BANK LEFT</button>
+                <button data-piece="bankRight">BANK RIGHT</button>
+                <button data-piece="boost">BOOST</button>
+            </div>
+
+            <div class="builder-actions">
+                <button id="testTrackButton">TEST TRACK</button>
+                <button id="clearTrackButton">CLEAR</button>
+                <button id="builderBackButton">BACK</button>
+            </div>
+
+            <div id="builderStatus">Select a piece.</div>
+        </div>
+    </div>
+
+    <div id="game">
+        <div id="hud">
+            <div class="hud-top">
+                <div>
+                    <span class="hud-label">TIME</span>
+                    <span id="timer">00:00.000</span>
+                </div>
+
+                <div>
+                    <span class="hud-label">BEST</span>
+                    <span id="bestTime">--:---.---</span>
+                </div>
+            </div>
+
+            <div id="countdown"></div>
+
+            <div class="hud-bottom">
+                <span id="speed">0 KM/H</span>
+                <span id="checkpoint">CHECKPOINT 1</span>
+            </div>
+        </div>
+
+        <button id="pauseButton">MENU</button>
     </div>
 
     <script type="module" src="./src/main.js"></script>

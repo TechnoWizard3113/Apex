@@ -1,39 +1,282 @@
+* {
+    box-sizing: border-box;
+}
+
 html,
 body {
     margin: 0;
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #87a8c4;
-    font-family: Arial, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #101318;
+    color: #ffffff;
+}
+
+button {
+    font: inherit;
+}
+
+.screen {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background:
+        radial-gradient(circle at center, #26303a 0%, #15191f 45%, #0b0d10 100%);
+    z-index: 20;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.menu-panel {
+    width: min(440px, calc(100% - 40px));
+    text-align: center;
+}
+
+.logo {
+    font-size: 76px;
+    font-weight: 900;
+    letter-spacing: 14px;
+    margin-left: 14px;
+}
+
+.subtitle {
+    margin-top: 8px;
+    color: #8d969f;
+    font-size: 13px;
+    letter-spacing: 5px;
+}
+
+.menu-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 55px;
+}
+
+.menu-buttons button,
+.panel button,
+.builder-panel button {
+    border: 1px solid #414952;
+    background: #1d232a;
+    color: white;
+    padding: 16px 20px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.menu-buttons button {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 2px;
+}
+
+.menu-buttons button:hover,
+.panel button:hover,
+.builder-panel button:hover {
+    background: #2a323b;
+    border-color: #77818b;
+}
+
+.menu-best {
+    margin-top: 40px;
+    display: flex;
+    justify-content: space-between;
+    color: #737d86;
+    font-size: 12px;
+}
+
+.menu-best strong {
+    color: white;
+    font-size: 14px;
+}
+
+.panel {
+    width: min(520px, calc(100% - 40px));
+    padding: 30px;
+    background: #151a20;
+    border: 1px solid #343b43;
+}
+
+.panel h1 {
+    margin: 0 0 25px;
+    font-size: 28px;
+    letter-spacing: 4px;
+}
+
+.track-option {
+    width: 100%;
+    text-align: left;
+    margin-bottom: 10px;
+}
+
+.track-option span {
+    display: block;
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.track-option small {
+    display: block;
+    margin-top: 5px;
+    color: #8b949d;
+}
+
+#trackBackButton,
+#leaderboardBackButton {
+    width: 100%;
+    margin-top: 15px;
+}
+
+#leaderboardList {
+    margin-bottom: 20px;
+}
+
+.leader-row {
+    display: grid;
+    grid-template-columns: 50px 1fr 120px;
+    padding: 13px 0;
+    border-bottom: 1px solid #30363d;
+}
+
+.leader-row:first-child {
+    color: #ffffff;
+}
+
+.leader-position {
+    color: #727c85;
+}
+
+.leader-name {
+    font-weight: 700;
+}
+
+.leader-time {
+    text-align: right;
+    font-family: monospace;
+}
+
+#game {
+    position: absolute;
+    inset: 0;
+    display: none;
+}
+
+#game.active {
+    display: block;
+}
+
+#hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.hud-top {
+    position: absolute;
+    top: 25px;
+    left: 30px;
+    right: 30px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.hud-top > div {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.hud-label {
+    color: #a3acb5;
+    font-size: 10px;
+    letter-spacing: 2px;
+}
+
+#timer,
+#bestTime {
+    font-family: monospace;
+    font-size: 22px;
+}
+
+.hud-bottom {
+    position: absolute;
+    bottom: 25px;
+    left: 30px;
+    right: 30px;
+    display: flex;
+    justify-content: space-between;
+    font-family: monospace;
+    font-size: 14px;
+}
+
+#countdown {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 90px;
+    font-weight: 900;
+}
+
+#pauseButton {
+    position: absolute;
+    top: 25px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 6;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(10, 12, 15, 0.5);
+    color: white;
+    padding: 8px 18px;
+    cursor: pointer;
+}
+
+.builder-panel {
+    width: min(850px, calc(100% - 30px));
+    background: #151a20;
+    border: 1px solid #343b43;
+    padding: 25px;
+}
+
+.builder-title {
+    font-size: 22px;
+    letter-spacing: 3px;
+    font-weight: 700;
+    margin-bottom: 20px;
+}
+
+.piece-buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.piece-buttons button {
+    min-height: 60px;
+}
+
+.builder-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+}
+
+.builder-actions button {
+    flex: 1;
+}
+
+#builderStatus {
+    margin-top: 15px;
+    color: #87919a;
+    font-size: 13px;
 }
 
 canvas {
     display: block;
-    width: 100%;
-    height: 100%;
-}
-
-#hud {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    color: white;
-    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
-}
-
-#speed {
-    position: absolute;
-    left: 24px;
-    bottom: 24px;
-    font-size: 32px;
-    font-weight: 700;
-}
-
-#controls {
-    position: absolute;
-    right: 24px;
-    bottom: 24px;
-    font-size: 14px;
-    opacity: 0.85;
 }

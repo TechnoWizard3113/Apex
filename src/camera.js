@@ -1,101 +1,93 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 
 export class FollowCamera {
-    constructor(camera, vehicle) {
+    constructor(camera) {
         this.camera = camera;
-        this.vehicle = vehicle;
 
-        this.position = new THREE.Vector3();
-        this.target = new THREE.Vector3();
-    }
-
-    update(delta) {
-        const vehicleGroup =
-            this.vehicle.getGroup();
-
-        const speed =
-            this.vehicle.getSpeed();
-
-        const forward =
-            new THREE.Vector3(
-                0,
-                0,
-                -1
-            ).applyQuaternion(
-                vehicleGroup.quaternion
-            );
-
-        const distance =
-            THREE.MathUtils.lerp(
-                8,
-                12,
-                Math.min(speed / 55, 1)
-            );
-
-        const height =
-            THREE.MathUtils.lerp(
-                4.5,
-                6.5,
-                Math.min(speed / 55, 1)
-            );
-
-        const offset =
-            new THREE.Vector3(
-                0,
-                height,
-                distance
-            );
-
-        offset.applyQuaternion(
-            vehicleGroup.quaternion
+        this.positionOffset = new THREE.Vector3(
+            0,
+            7,
+            -13
         );
 
-        const desired =
-            vehicleGroup.position
-                .clone()
-                .add(offset);
+        this.lookOffset = new THREE.Vector3(
+            0,
+            1.2,
+            8
+        );
 
-        const smoothing =
-            1 -
-            Math.pow(
-                0.0001,
-                delta
+        this.currentPosition =
+            new THREE.Vector3();
+
+        this.targetPosition =
+            new THREE.Vector3();
+
+        this.targetLook =
+            new THREE.Vector3();
+    }
+
+    update(vehicle, delta) {
+        const speed =
+            Math.abs(vehicle.forwardSpeed);
+
+        const speedFactor =
+            THREE.MathUtils.clamp(
+                speed / 60,
+                0,
+                1
             );
 
-        this.position.lerp(
-            desired,
+        const desiredOffset =
+            this.positionOffset.clone();
+
+        desiredOffset.z -=
+            speedFactor * 4;
+
+        desiredOffset.y +=
+            speedFactor * 2;
+
+        desiredOffset.applyQuaternion(
+            vehicle.group.quaternion
+        );
+
+        this.targetPosition.copy(
+            vehicle.group.position
+        ).add(desiredOffset);
+
+        const smoothing =
+            1 - Math.exp(-6 * delta);
+
+        this.currentPosition.lerp(
+            this.targetPosition,
             smoothing
         );
 
         this.camera.position.copy(
-            this.position
+            this.currentPosition
         );
 
-        this.target.copy(
-            vehicleGroup.position
+        this.targetLook.copy(
+            vehicle.group.position
         );
 
-        this.target.y += 1;
+        this.lookOffset.applyQuaternion(
+            vehicle.group.quaternion
+        );
 
-        this.target.addScaledVector(
-            forward,
-            Math.min(speed * 0.15, 7)
+        this.targetLook.add(
+            this.lookOffset
         );
 
         this.camera.lookAt(
-            this.target
+            this.targetLook
         );
 
-        const targetFov =
+        this.camera.fov =
             THREE.MathUtils.lerp(
                 68,
-                82,
-                Math.min(speed / 55, 1)
+                78,
+                speedFactor
             );
-
-        this.camera.fov +=
-            (targetFov - this.camera.fov) *
-            Math.min(delta * 4, 1);
 
         this.camera.updateProjectionMatrix();
     }
