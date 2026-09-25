@@ -4,154 +4,196 @@ export const TRACK_WIDTH = 18;
 export const STRAIGHT_LENGTH = 30;
 export const CURVE_RADIUS = 30;
 export const CURVE_ANGLE = Math.PI / 2;
-export const RAMP_LENGTH = 30;
 export const RAMP_HEIGHT = 8;
 export const BANK_ANGLE = THREE.MathUtils.degToRad(28);
 
-function basisFromDirection(direction) {
-    const forward = new THREE.Vector3(
-        Math.sin(direction),
-        0,
-        Math.cos(direction)
-    ).normalize();
+const PIECE_HEIGHT = 1.2;
 
-    const right = new THREE.Vector3(
-        Math.cos(direction),
-        0,
-        -Math.sin(direction)
-    ).normalize();
-
-    return { forward, right };
-}
-
-function createRoadMaterial(color = 0x3b4147) {
+function createMaterial(color, transparent = false) {
     return new THREE.MeshStandardMaterial({
         color,
-        roughness: 0.85,
-        metalness: 0.05
+        roughness: 0.78,
+        metalness: 0.05,
+        transparent,
+        opacity: transparent ? 0.42 : 1
     });
 }
 
-function createRoadMesh(width, length, height = 0, color = 0x3b4147) {
-    const geometry = new THREE.BoxGeometry(width, 0.5, length);
-    const mesh = new THREE.Mesh(geometry, createRoadMaterial(color));
-
-    mesh.position.y = height;
-    mesh.receiveShadow = true;
+function makeBox(length, width, height, material) {
+    const geometry = new THREE.BoxGeometry(width, height, length);
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.castShadow = true;
-
+    mesh.receiveShadow = true;
+    mesh.position.y = -height / 2;
     return mesh;
 }
 
+function forwardVector(yaw, pitch = 0) {
+    return new THREE.Vector3(
+        Math.sin(yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        Math.cos(yaw) * Math.cos(pitch)
+    ).normalize();
+}
+
+function connector(position, yaw, pitch = 0, roll = 0) {
+    return {
+        position: position.clone(),
+        yaw,
+        pitch,
+        roll
+    };
+}
+
+function transformPoint(origin, yaw, local) {
+    const result = local.clone();
+    result.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    return origin.clone().add(result);
+}
+
 export class TrackPiece {
-    constructor(type, startPosition, startDirection) {
+    constructor(type, startConnector) {
         this.type = type;
-        this.start = startPosition.clone();
-        this.direction = startDirection;
+        this.start = connector(
+            startConnector.position,
+            startConnector.yaw,
+            startConnector.pitch,
+            startConnector.roll
+        );
+
         this.length = STRAIGHT_LENGTH;
         this.width = TRACK_WIDTH;
-        this.height = 0;
-        this.end = startPosition.clone();
-        this.endDirection = startDirection;
+        this.height = PIECE_HEIGHT;
+
+        this.end = null;
+        this.endDirection = null;
         this.mesh = new THREE.Group();
 
         this.build();
     }
 
     build() {
-        const { forward, right } = basisFromDirection(this.direction);
+        const roadMaterial = createMaterial(0x343941);
+        const stripeMaterial = createMaterial(0xd7dbe0);
 
         if (
             this.type === "straight" ||
-            this.type === "boost"
+            this.type === "boost" ||
+            this.type === "ramp" ||
+            this.type === "bankLeft" ||
+            this.type === "bankRight"
         ) {
-            this.length = STRAIGHT_LENGTH;
+            let pitch = this.start.pitch;
+            let roll = this.start.roll;
 
-            const center = this.start.clone()
-                .addScaledVector(forward, this.length / 2);
+            if (this.type === "ramp") {
+                pitch = Math.atan2(RAMP_HEIGHT, STRAIGHT_LENGTH);
+            }
 
-            const road = createRoadMesh(
-                this.width,
+            if (this.type === "bankLeft") {
+                roll = BANK_ANGLE;
+            }
+
+            if (this.type === "bankRight") {
+                roll = -BANK_ANGLE;
+            }
+
+            const road = makeBox(
                 this.length,
-                0,
-                this.type === "boost" ? 0x254e68 : 0x3b4147
+                this.width,
+                this.height,
+                this.type === "boost"
+                    ? createMaterial(0x2368d1)
+                    : roadMaterial
             );
 
+            road.rotation.y = this.start.yaw;
+            road.rotation.x = -pitch;
+            road.rotation.z = roll;
+
+            const center = transformPoint(
+                this.start.position,
+                this.start.yaw,
+                new THREE.Vector3(0, 0, this.length / 2)
+            );
+
+            center.y += Math.sin(pitch) * this.length / 2;
             road.position.copy(center);
-            road.rotation.y = this.direction;
+            road.position.y -= Math.cos(pitch) * this.height / 2;
+
             this.mesh.add(road);
 
             if (this.type === "boost") {
-                for (let i = 0; i < 5; i++) {
-                    const stripeGeometry = new THREE.BoxGeometry(
-                        this.width * 0.75,
-                        0.08,
-                        1.5
+                for (let i = -1; i <= 1; i++) {
+                    const arrowGeometry = new THREE.ConeGeometry(1.2, 4, 4);
+                    const arrow = new THREE.Mesh(
+                        arrowGeometry,
+                        createMaterial(0xffffff)
                     );
 
-                    const stripe = new THREE.Mesh(
-                        stripeGeometry,
-                        new THREE.MeshStandardMaterial({
-                            color: 0x8da8ba,
-                            roughness: 0.6
-                        })
+                    arrow.rotation.x = Math.PI / 2;
+                    arrow.rotation.y = this.start.yaw;
+
+                    const local = new THREE.Vector3(
+                        i * 5,
+                        0.9,
+                        this.length / 2
                     );
 
-                    stripe.position.copy(
-                        this.start.clone().addScaledVector(
-                            forward,
-                            5 + i * 5
+                    arrow.position.copy(
+                        transformPoint(
+                            this.start.position,
+                            this.start.yaw,
+                            local
                         )
                     );
 
-                    stripe.position.y = 0.3;
-                    stripe.rotation.y = this.direction;
-                    this.mesh.add(stripe);
+                    arrow.position.y += Math.sin(pitch) * this.length / 2;
+                    this.mesh.add(arrow);
                 }
             }
 
-            this.end = this.start.clone()
-                .addScaledVector(forward, this.length);
-            return;
-        }
-
-        if (this.type === "ramp") {
-            this.length = RAMP_LENGTH;
-            this.height = RAMP_HEIGHT;
-
-            const slopeAngle = Math.atan2(
-                RAMP_HEIGHT,
-                RAMP_LENGTH
-            );
-
-            const center = this.start.clone()
-                .addScaledVector(forward, this.length / 2);
-
-            const slopeLength = Math.sqrt(
-                RAMP_LENGTH * RAMP_LENGTH +
-                RAMP_HEIGHT * RAMP_HEIGHT
-            );
-
-            const geometry = new THREE.BoxGeometry(
-                this.width,
+            const stripeGeometry = new THREE.BoxGeometry(
                 0.5,
-                slopeLength
+                0.12,
+                this.length - 4
             );
 
-            const road = new THREE.Mesh(
-                geometry,
-                createRoadMaterial()
+            const stripe = new THREE.Mesh(
+                stripeGeometry,
+                stripeMaterial
             );
 
-            road.position.copy(center);
-            road.position.y = RAMP_HEIGHT / 2;
-            road.rotation.y = this.direction;
-            road.rotation.x = -slopeAngle;
+            stripe.rotation.y = this.start.yaw;
+            stripe.rotation.x = -pitch;
+            stripe.rotation.z = roll;
 
-            this.mesh.add(road);
+            stripe.position.copy(
+                transformPoint(
+                    this.start.position,
+                    this.start.yaw,
+                    new THREE.Vector3(0, 0.68, this.length / 2)
+                )
+            );
 
-            this.end = this.start.clone()
-                .addScaledVector(forward, this.length);
+            stripe.position.y += Math.sin(pitch) * this.length / 2;
+
+            this.mesh.add(stripe);
+
+            const endPosition = transformPoint(
+                this.start.position,
+                this.start.yaw,
+                new THREE.Vector3(0, 0, this.length)
+            );
+
+            endPosition.y += Math.sin(pitch) * this.length;
+
+            this.end = connector(
+                endPosition,
+                this.start.yaw,
+                pitch,
+                roll
+            );
 
             return;
         }
@@ -160,146 +202,128 @@ export class TrackPiece {
             this.type === "curveLeft" ||
             this.type === "curveRight"
         ) {
-            const sign = this.type === "curveLeft" ? 1 : -1;
+            const direction =
+                this.type === "curveLeft" ? 1 : -1;
 
-            const center = this.start.clone()
-                .addScaledVector(right, sign * CURVE_RADIUS);
+            const radius = CURVE_RADIUS;
+            const angle = CURVE_ANGLE;
 
-            const curveGroup = new THREE.Group();
-
-            const segments = 20;
-
-            for (let i = 0; i < segments; i++) {
-                const t0 = i / segments;
-                const t1 = (i + 1) / segments;
-
-                const a0 = this.direction - sign * Math.PI / 2 + sign * t0 * CURVE_ANGLE;
-                const a1 = this.direction - sign * Math.PI / 2 + sign * t1 * CURVE_ANGLE;
-
-                const p0 = center.clone().add(
-                    new THREE.Vector3(
-                        Math.cos(a0) * CURVE_RADIUS,
-                        0,
-                        Math.sin(a0) * CURVE_RADIUS
-                    )
-                );
-
-                const p1 = center.clone().add(
-                    new THREE.Vector3(
-                        Math.cos(a1) * CURVE_RADIUS,
-                        0,
-                        Math.sin(a1) * CURVE_RADIUS
-                    )
-                );
-
-                const midpoint = p0.clone().add(p1).multiplyScalar(0.5);
-                const segmentLength = p0.distanceTo(p1);
-
-                const road = createRoadMesh(
-                    this.width,
-                    segmentLength + 0.15,
-                    0
-                );
-
-                road.position.copy(midpoint);
-                road.rotation.y = Math.atan2(
-                    p1.x - p0.x,
-                    p1.z - p0.z
-                );
-
-                curveGroup.add(road);
-            }
-
-            this.mesh.add(curveGroup);
-
-            const finalAngle =
-                this.direction + sign * CURVE_ANGLE;
-
-            const endForward = basisFromDirection(finalAngle).forward;
-
-            this.end = center.clone()
-                .add(
-                    new THREE.Vector3(
-                        Math.cos(
-                            this.direction -
-                            sign * Math.PI / 2 +
-                            sign * CURVE_ANGLE
-                        ) * CURVE_RADIUS,
-                        0,
-                        Math.sin(
-                            this.direction -
-                            sign * Math.PI / 2 +
-                            sign * CURVE_ANGLE
-                        ) * CURVE_RADIUS
-                    )
-                );
-
-            this.endDirection = finalAngle;
-
-            return;
-        }
-
-        if (
-            this.type === "bankLeft" ||
-            this.type === "bankRight"
-        ) {
-            const sign = this.type === "bankLeft" ? 1 : -1;
-
-            this.length = STRAIGHT_LENGTH;
-
-            const center = this.start.clone()
-                .addScaledVector(forward, this.length / 2);
-
-            const road = createRoadMesh(
-                this.width,
-                this.length,
+            const centerOffset = new THREE.Vector3(
+                direction * radius,
+                0,
                 0
             );
 
-            road.position.copy(center);
-            road.rotation.y = this.direction;
-            road.rotation.z = sign * BANK_ANGLE;
+            const center = transformPoint(
+                this.start.position,
+                this.start.yaw,
+                centerOffset
+            );
+
+            const startAngle =
+                this.start.yaw +
+                (direction > 0 ? Math.PI : 0);
+
+            const segments = 24;
+
+            const shape = new THREE.Shape();
+
+            for (let i = 0; i <= segments; i++) {
+                const t = i / segments;
+                const a = startAngle + direction * angle * t;
+
+                const x = Math.sin(a) * radius;
+                const z = Math.cos(a) * radius;
+
+                const world = transformPoint(
+                    center,
+                    0,
+                    new THREE.Vector3(x, 0, z)
+                );
+
+                const localX = world.x - this.start.position.x;
+                const localZ = world.z - this.start.position.z;
+
+                if (i === 0) {
+                    shape.moveTo(localX, localZ);
+                } else {
+                    shape.lineTo(localX, localZ);
+                }
+            }
+
+            const geometry = new THREE.ExtrudeGeometry(
+                shape,
+                {
+                    depth: this.width,
+                    bevelEnabled: false,
+                    steps: 1
+                }
+            );
+
+            geometry.rotateX(Math.PI / 2);
+
+            const road = new THREE.Mesh(
+                geometry,
+                roadMaterial
+            );
+
+            road.castShadow = true;
+            road.receiveShadow = true;
 
             this.mesh.add(road);
 
-            this.end = this.start.clone()
-                .addScaledVector(forward, this.length);
+            const endYaw =
+                this.start.yaw +
+                direction * angle;
+
+            const endPosition = center.clone();
+
+            endPosition.x =
+                center.x +
+                Math.sin(startAngle + direction * angle) *
+                radius;
+
+            endPosition.z =
+                center.z +
+                Math.cos(startAngle + direction * angle) *
+                radius;
+
+            this.end = connector(
+                endPosition,
+                endYaw,
+                this.start.pitch,
+                this.start.roll
+            );
 
             return;
         }
     }
 
-    getHeightAt(position) {
-        const local = position.clone().sub(this.start);
-
-        const { forward, right } = basisFromDirection(this.direction);
-
-        const forwardDistance = local.dot(forward);
-
-        if (this.type === "ramp") {
-            const t = THREE.MathUtils.clamp(
-                forwardDistance / this.length,
-                0,
-                1
-            );
-
-            return RAMP_HEIGHT * t;
-        }
-
-        return 0;
+    getForward() {
+        return forwardVector(
+            this.start.yaw,
+            this.start.pitch
+        );
     }
 
-    contains(position) {
-        const local = position.clone().sub(this.start);
-        const { forward, right } = basisFromDirection(this.direction);
+    getEndForward() {
+        return forwardVector(
+            this.end.yaw,
+            this.end.pitch
+        );
+    }
 
-        const forwardDistance = local.dot(forward);
-        const sideDistance = Math.abs(local.dot(right));
+    getBoundsRadius() {
+        if (
+            this.type === "curveLeft" ||
+            this.type === "curveRight"
+        ) {
+            return CURVE_RADIUS + this.width;
+        }
 
-        return (
-            forwardDistance >= -1 &&
-            forwardDistance <= this.length + 1 &&
-            sideDistance <= this.width / 2
+        return Math.sqrt(
+            (this.length / 2) ** 2 +
+            (this.width / 2) ** 2
         );
     }
 }
@@ -311,151 +335,339 @@ export class Track {
         this.scene.add(this.group);
 
         this.pieces = [];
-        this.startPosition = new THREE.Vector3(0, 0, 0);
-        this.startDirection = 0;
+        this.startConnector = connector(
+            new THREE.Vector3(0, 0, 0),
+            0,
+            0,
+            0
+        );
 
-        this.finishPosition = new THREE.Vector3();
-        this.finishDirection = 0;
+        this.startMarker = null;
+        this.endMarker = null;
+        this.environment = new THREE.Group();
 
-        this.buildDefault();
+        this.scene.add(this.environment);
+
+        this.buildEnvironment();
+        this.createMarkers();
     }
 
     clear() {
-        while (this.group.children.length > 0) {
+        while (this.group.children.length) {
             this.group.remove(this.group.children[0]);
         }
 
         this.pieces = [];
-    }
 
-    addPiece(type) {
-        let start;
-        let direction;
-
-        if (this.pieces.length === 0) {
-            start = this.startPosition.clone();
-            direction = this.startDirection;
-        } else {
-            const previous = this.pieces[this.pieces.length - 1];
-
-            start = previous.end.clone();
-            direction = previous.endDirection;
-        }
-
-        const piece = new TrackPiece(
-            type,
-            start,
-            direction
+        this.startConnector = connector(
+            new THREE.Vector3(0, 0, 0),
+            0,
+            0,
+            0
         );
 
-        if (this.intersectsExisting(piece)) {
-            return false;
-        }
-
-        this.pieces.push(piece);
-        this.group.add(piece.mesh);
-
-        this.updateFinish();
-
-        return true;
+        this.updateMarkers();
     }
 
-    intersectsExisting(newPiece) {
-        const newCenter = newPiece.start.clone()
-            .add(newPiece.end)
-            .multiplyScalar(0.5);
+    buildEnvironment() {
+        const groundGeometry = new THREE.PlaneGeometry(
+            2500,
+            2500
+        );
 
-        const newRadius =
-            newPiece.start.distanceTo(newPiece.end) / 2 +
-            TRACK_WIDTH;
+        const groundMaterial =
+            new THREE.MeshStandardMaterial({
+                color: 0x1a211d,
+                roughness: 1
+            });
 
-        for (const piece of this.pieces) {
-            const center = piece.start.clone()
-                .add(piece.end)
-                .multiplyScalar(0.5);
+        const ground = new THREE.Mesh(
+            groundGeometry,
+            groundMaterial
+        );
 
-            const radius =
-                piece.start.distanceTo(piece.end) / 2 +
-                TRACK_WIDTH;
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -2;
+        ground.receiveShadow = true;
 
-            if (
-                newCenter.distanceTo(center) <
-                newRadius + radius - TRACK_WIDTH
-            ) {
-                if (newPiece.type.includes("curve") && piece.type.includes("curve")) {
-                    continue;
+        this.environment.add(ground);
+
+        const grid = new THREE.GridHelper(
+            1000,
+            100,
+            0x36413b,
+            0x252d29
+        );
+
+        grid.position.y = -1.95;
+
+        this.environment.add(grid);
+    }
+
+    createMarkers() {
+        this.startMarker = this.createMarker(
+            0x32d583,
+            "START"
+        );
+
+        this.endMarker = this.createMarker(
+            0xffbd32,
+            "END"
+        );
+
+        this.scene.add(this.startMarker);
+        this.scene.add(this.endMarker);
+
+        this.updateMarkers();
+    }
+
+    createMarker(color, label) {
+        const group = new THREE.Group();
+
+        const ringGeometry =
+            new THREE.TorusGeometry(5, 0.35, 8, 32);
+
+        const ring = new THREE.Mesh(
+            ringGeometry,
+            new THREE.MeshBasicMaterial({
+                color
+            })
+        );
+
+        ring.rotation.x = Math.PI / 2;
+
+        group.add(ring);
+
+        const arrowGeometry =
+            new THREE.ConeGeometry(1.1, 3, 6);
+
+        const arrow = new THREE.Mesh(
+            arrowGeometry,
+            new THREE.MeshBasicMaterial({
+                color
+            })
+        );
+
+        arrow.position.y = 1.5;
+
+        group.add(arrow);
+
+        group.userData.label = label;
+
+        return group;
+    }
+
+    updateMarkers() {
+        const start = this.startConnector;
+
+        this.startMarker.position.copy(start.position);
+        this.startMarker.position.y += 0.15;
+        this.startMarker.rotation.y = start.yaw;
+
+        const end =
+            this.pieces.length > 0
+                ? this.pieces[this.pieces.length - 1].end
+                : this.startConnector;
+
+        this.endMarker.position.copy(end.position);
+        this.endMarker.position.y += 0.15;
+        this.endMarker.rotation.y = end.yaw;
+    }
+
+    getCurrentConnector() {
+        if (this.pieces.length === 0) {
+            return this.startConnector;
+        }
+
+        return this.pieces[this.pieces.length - 1].end;
+    }
+
+    createPreview(type) {
+        const piece = new TrackPiece(
+            type,
+            this.getCurrentConnector()
+        );
+
+        piece.mesh.traverse((object) => {
+            if (object.isMesh) {
+                object.material = object.material.clone();
+                object.material.transparent = true;
+                object.material.opacity = 0.35;
+                object.material.depthWrite = false;
+            }
+        });
+
+        return piece;
+    }
+
+    intersectsExisting(piece) {
+        for (const existing of this.pieces) {
+            const distance =
+                existing.end.position.distanceTo(
+                    piece.start.position
+                );
+
+            if (distance < 0.5) {
+                continue;
+            }
+
+            const centers = [
+                existing.start.position,
+                existing.end.position,
+                piece.start.position,
+                piece.end.position
+            ];
+
+            for (const a of centers) {
+                for (const b of centers) {
+                    if (
+                        a !== b &&
+                        a.distanceTo(b) < 4
+                    ) {
+                        return true;
+                    }
                 }
-
-                return true;
             }
         }
 
         return false;
     }
 
-    updateFinish() {
-        if (this.pieces.length === 0) {
-            return;
+    canAdd(type) {
+        const preview = this.createPreview(type);
+
+        if (this.intersectsExisting(preview)) {
+            return false;
         }
 
-        const last = this.pieces[this.pieces.length - 1];
-
-        this.finishPosition = last.end.clone();
-        this.finishDirection = last.endDirection;
+        return true;
     }
 
-    getHeightAt(position) {
-        for (const piece of this.pieces) {
-            if (piece.contains(position)) {
-                return piece.getHeightAt(position);
-            }
+    addPiece(type) {
+        const piece = new TrackPiece(
+            type,
+            this.getCurrentConnector()
+        );
+
+        if (this.intersectsExisting(piece)) {
+            return null;
         }
 
-        return null;
-    }
+        this.pieces.push(piece);
+        this.group.add(piece.mesh);
 
-    getPieceAt(position) {
-        for (const piece of this.pieces) {
-            if (piece.contains(position)) {
-                return piece;
-            }
-        }
+        this.updateMarkers();
 
-        return null;
-    }
-
-    getSpawn() {
-        if (this.pieces.length === 0) {
-            return {
-                position: this.startPosition.clone(),
-                direction: this.startDirection
-            };
-        }
-
-        const first = this.pieces[0];
-
-        const { forward } = basisFromDirection(first.direction);
-
-        return {
-            position: first.start.clone()
-                .addScaledVector(forward, 4)
-                .add(new THREE.Vector3(0, 1, 0)),
-            direction: first.direction
-        };
+        return piece;
     }
 
     buildDefault() {
         this.clear();
 
-        this.addPiece("straight");
-        this.addPiece("straight");
-        this.addPiece("ramp");
-        this.addPiece("straight");
-        this.addPiece("curveLeft");
-        this.addPiece("straight");
-        this.addPiece("bankRight");
-        this.addPiece("boost");
-        this.addPiece("curveRight");
-        this.addPiece("straight");
+        const pieces = [
+            "straight",
+            "straight",
+            "curveLeft",
+            "straight",
+            "ramp",
+            "straight",
+            "bankRight",
+            "straight",
+            "curveRight",
+            "straight",
+            "boost",
+            "straight",
+            "curveRight",
+            "straight",
+            "ramp",
+            "straight",
+            "bankLeft",
+            "straight",
+            "curveLeft",
+            "straight",
+            "boost",
+            "straight"
+        ];
+
+        for (const type of pieces) {
+            this.addPiece(type);
+        }
+    }
+
+    buildSpeedCircuit() {
+        this.clear();
+
+        const pieces = [
+            "straight",
+            "boost",
+            "straight",
+            "curveRight",
+            "straight",
+            "curveRight",
+            "straight",
+            "ramp",
+            "straight",
+            "bankLeft",
+            "straight",
+            "curveLeft",
+            "straight",
+            "boost",
+            "straight",
+            "curveLeft",
+            "straight",
+            "curveLeft",
+            "straight",
+            "ramp",
+            "straight",
+            "bankRight",
+            "straight",
+            "curveRight",
+            "straight"
+        ];
+
+        for (const type of pieces) {
+            this.addPiece(type);
+        }
+    }
+
+    getSpawn() {
+        const position =
+            this.startConnector.position.clone();
+
+        position.y += 2;
+
+        return {
+            position,
+            yaw: this.startConnector.yaw
+        };
+    }
+
+    getFinish() {
+        return this.pieces.length
+            ? this.pieces[this.pieces.length - 1].end.position.clone()
+            : this.startConnector.position.clone();
+    }
+
+    getHeightAt(position) {
+        let best = null;
+        let bestDistance = Infinity;
+
+        for (const piece of this.pieces) {
+            const distance =
+                piece.start.position.distanceTo(
+                    position
+                );
+
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = piece;
+            }
+        }
+
+        if (!best) {
+            return 0;
+        }
+
+        return best.start.position.y;
     }
 }

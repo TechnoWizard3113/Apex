@@ -4,91 +4,80 @@ export class FollowCamera {
     constructor(camera) {
         this.camera = camera;
 
-        this.positionOffset = new THREE.Vector3(
-            0,
-            7,
-            -13
-        );
+        this.position = new THREE.Vector3();
+        this.lookTarget = new THREE.Vector3();
 
-        this.lookOffset = new THREE.Vector3(
-            0,
-            1.2,
-            8
-        );
-
-        this.currentPosition =
-            new THREE.Vector3();
-
-        this.targetPosition =
-            new THREE.Vector3();
-
-        this.targetLook =
-            new THREE.Vector3();
+        this.initialized = false;
     }
 
     update(vehicle, delta) {
-        const speed =
-            Math.abs(vehicle.forwardSpeed);
+        if (!vehicle) {
+            return;
+        }
 
-        const speedFactor =
-            THREE.MathUtils.clamp(
-                speed / 60,
-                0,
-                1
-            );
-
-        const desiredOffset =
-            this.positionOffset.clone();
-
-        desiredOffset.z -=
-            speedFactor * 4;
-
-        desiredOffset.y +=
-            speedFactor * 2;
-
-        desiredOffset.applyQuaternion(
-            vehicle.group.quaternion
+        const forward = new THREE.Vector3(
+            Math.sin(vehicle.yaw),
+            0,
+            Math.cos(vehicle.yaw)
         );
 
-        this.targetPosition.copy(
-            vehicle.group.position
-        ).add(desiredOffset);
+        const desiredPosition =
+            vehicle.position.clone()
+                .addScaledVector(forward, -13);
+
+        desiredPosition.y += 7;
+
+        const minimumHeight =
+            vehicle.position.y + 2.2;
+
+        if (desiredPosition.y < minimumHeight) {
+            desiredPosition.y = minimumHeight;
+        }
+
+        if (!this.initialized) {
+            this.camera.position.copy(
+                desiredPosition
+            );
+
+            this.initialized = true;
+        }
 
         const smoothing =
-            1 - Math.exp(-6 * delta);
+            1 - Math.pow(0.0005, delta);
 
-        this.currentPosition.lerp(
-            this.targetPosition,
+        this.camera.position.lerp(
+            desiredPosition,
             smoothing
         );
 
-        this.camera.position.copy(
-            this.currentPosition
-        );
+        const target =
+            vehicle.position.clone();
 
-        this.targetLook.copy(
-            vehicle.group.position
-        );
+        target.y += 2.2;
 
-        this.lookOffset.applyQuaternion(
-            vehicle.group.quaternion
-        );
-
-        this.targetLook.add(
-            this.lookOffset
+        this.lookTarget.lerp(
+            target,
+            smoothing
         );
 
         this.camera.lookAt(
-            this.targetLook
+            this.lookTarget
         );
+
+        const speed =
+            Math.abs(vehicle.speed || 0);
 
         this.camera.fov =
             THREE.MathUtils.lerp(
-                68,
-                78,
-                speedFactor
+                this.camera.fov,
+                65 + Math.min(speed * 0.08, 8),
+                1 - Math.pow(0.001, delta)
             );
 
         this.camera.updateProjectionMatrix();
+    }
+
+    reset() {
+        this.initialized = false;
     }
 }

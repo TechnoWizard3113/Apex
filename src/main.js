@@ -1,730 +1,1047 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
+import { Track } from "./track.js";
+import { Vehicle } from "./vehicle.js";
+import { FollowCamera } from "./camera.js";
 
-import {
-    Track
-} from "./track.js";
-
-import {
-    Vehicle
-} from "./vehicle.js";
-
-import {
-    FollowCamera
-} from "./camera.js";
-
-const menu = document.getElementById("menu");
-const trackSelect = document.getElementById("trackSelect");
-const leaderboard = document.getElementById("leaderboard");
-const builder = document.getElementById("builder");
-const game = document.getElementById("game");
-
-const timerElement =
-    document.getElementById("timer");
-
-const bestElement =
-    document.getElementById("bestTime");
-
-const menuBestElement =
-    document.getElementById("menuBest");
-
-const speedElement =
-    document.getElementById("speed");
-
-const checkpointElement =
-    document.getElementById("checkpoint");
-
-const countdownElement =
-    document.getElementById("countdown");
-
-const leaderboardList =
-    document.getElementById("leaderboardList");
-
-const builderStatus =
-    document.getElementById("builderStatus");
+const canvas = document.getElementById("game");
 
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x10151a);
+scene.fog = new THREE.Fog(0x10151a, 180, 900);
 
-scene.background =
-    new THREE.Color(0x9eb6c7);
-
-scene.fog = new THREE.Fog(
-    0x9eb6c7,
-    150,
-    650
+const camera = new THREE.PerspectiveCamera(
+    65,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    2500
 );
 
-const camera =
-    new THREE.PerspectiveCamera(
-        68,
-        window.innerWidth / window.innerHeight,
-        0.1,
-        1200
-    );
+const renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: true
+});
 
-const renderer =
-    new THREE.WebGLRenderer({
-        antialias: true
-    });
+renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 2)
+);
 
 renderer.setSize(
     window.innerWidth,
     window.innerHeight
 );
 
-renderer.setPixelRatio(
-    Math.min(window.devicePixelRatio, 2)
-);
-
 renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-document.body.appendChild(
-    renderer.domElement
-);
+const clock = new THREE.Clock();
 
-const ambient =
-    new THREE.HemisphereLight(
-        0xffffff,
-        0x53606b,
-        2
-    );
+const track = new Track(scene);
+const vehicle = new Vehicle(scene);
+const followCamera = new FollowCamera(camera);
 
-scene.add(ambient);
-
-const sun =
-    new THREE.DirectionalLight(
-        0xffffff,
-        3
-    );
-
-sun.position.set(
-    80,
-    120,
-    60
-);
-
-sun.castShadow = true;
-
-sun.shadow.mapSize.width = 2048;
-sun.shadow.mapSize.height = 2048;
-
-scene.add(sun);
-
-const ground =
-    new THREE.Mesh(
-        new THREE.PlaneGeometry(
-            2000,
-            2000
-        ),
-        new THREE.MeshStandardMaterial({
-            color: 0x66735e,
-            roughness: 1
-        })
-    );
-
-ground.rotation.x =
-    -Math.PI / 2;
-
-ground.position.y = -0.3;
-
-ground.receiveShadow = true;
-
-scene.add(ground);
-
-const track =
-    new Track(scene);
-
-const vehicle =
-    new Vehicle(scene, track);
-
-const followCamera =
-    new FollowCamera(camera);
-
-const keys = {
-    forward: false,
-    backward: false,
-    left: false,
-    right: false
-};
-
-let racing = false;
-let countdownRunning = false;
-let raceStart = 0;
-let finishTime = null;
+let currentTrackId = 1;
 let currentTrackName = "Mountain Run";
 
-const leaderboardKey =
-    "apex-leaderboard";
+let gameState = "menu";
+let raceRunning = false;
+let raceFinished = false;
 
-function getLeaderboard() {
-    try {
-        const data =
-            JSON.parse(
-                localStorage.getItem(
-                    leaderboardKey
-                )
-            );
+let countdown = 0;
+let countdownTimer = 0;
 
-        if (Array.isArray(data)) {
-            return data;
+let raceTime = 0;
+let startTime = 0;
+
+let selectedBuilderPiece = "straight";
+let previewPiece = null;
+
+const keys = {};
+
+const LEADERBOARD_KEY = "apex-leaderboards";
+
+const TRACKS = {
+    1: {
+        id: 1,
+        name: "Mountain Run",
+        build() {
+            track.buildDefault();
         }
-    } catch {
-    }
+    },
 
-    return [];
+    2: {
+        id: 2,
+        name: "Speed Circuit",
+        build() {
+            track.buildSpeedCircuit();
+        }
+    }
+};
+
+function $(id) {
+    return document.getElementById(id);
 }
 
-function saveTime(time) {
-    const data =
-        getLeaderboard();
+function show(element, visible) {
+    if (!element) {
+        return;
+    }
 
-    data.push({
-        track: currentTrackName,
-        time
+    element.style.display = visible ? "" : "none";
+}
+
+function setText(id, value) {
+    const element = $(id);
+
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+function loadLeaderboards() {
+    try {
+        const raw =
+            localStorage.getItem(LEADERBOARD_KEY);
+
+        if (!raw) {
+            return {};
+        }
+
+        const data = JSON.parse(raw);
+
+        if (
+            !data ||
+            typeof data !== "object" ||
+            Array.isArray(data)
+        ) {
+            return {};
+        }
+
+        return data;
+    } catch {
+        return {};
+    }
+}
+
+function saveLeaderboards(data) {
+    localStorage.setItem(
+        LEADERBOARD_KEY,
+        JSON.stringify(data)
+    );
+}
+
+function saveTime(trackId, time) {
+    const leaderboards = loadLeaderboards();
+    const id = String(trackId);
+
+    if (!leaderboards[id]) {
+        leaderboards[id] = [];
+    }
+
+    leaderboards[id].push({
+        time,
+        date: Date.now()
     });
 
-    data.sort(
+    leaderboards[id].sort(
         (a, b) => a.time - b.time
     );
 
-    localStorage.setItem(
-        leaderboardKey,
-        JSON.stringify(
-            data.slice(0, 20)
-        )
-    );
+    leaderboards[id] =
+        leaderboards[id].slice(0, 10);
+
+    saveLeaderboards(leaderboards);
 }
 
-function getBestTime() {
-    const times =
-        getLeaderboard()
-            .filter(
-                item =>
-                    item.track ===
-                    currentTrackName
-            );
+function getLeaderboard(trackId) {
+    const leaderboards = loadLeaderboards();
+    const id = String(trackId);
 
-    if (times.length === 0) {
+    return leaderboards[id] || [];
+}
+
+function getPersonalBest(trackId) {
+    const leaderboard =
+        getLeaderboard(trackId);
+
+    if (leaderboard.length === 0) {
         return null;
     }
 
-    return times[0].time;
+    return leaderboard[0].time;
 }
 
-function formatTime(milliseconds) {
+function formatTime(seconds) {
     if (
-        milliseconds === null ||
-        !Number.isFinite(milliseconds)
+        seconds === null ||
+        seconds === undefined ||
+        !Number.isFinite(seconds)
     ) {
-        return "--:---.---";
+        return "--:--.---";
     }
-
-    const totalSeconds =
-        milliseconds / 1000;
 
     const minutes =
-        Math.floor(
-            totalSeconds / 60
-        );
+        Math.floor(seconds / 60);
 
-    const seconds =
-        totalSeconds % 60;
+    const remaining =
+        seconds - minutes * 60;
 
-    return (
-        String(minutes).padStart(2, "0") +
-        ":" +
-        seconds.toFixed(3).padStart(6, "0")
-    );
+    const secondsText =
+        remaining.toFixed(3).padStart(6, "0");
+
+    return `${minutes}:${secondsText}`;
 }
 
-function updateBestDisplay() {
+function updatePersonalBest() {
     const best =
-        getBestTime();
+        getPersonalBest(currentTrackId);
 
-    const formatted =
-        formatTime(best);
-
-    bestElement.textContent =
-        formatted;
-
-    menuBestElement.textContent =
-        formatted;
-}
-
-function showOnly(screen) {
-    menu.classList.add("hidden");
-    trackSelect.classList.add("hidden");
-    leaderboard.classList.add("hidden");
-    builder.classList.add("hidden");
-
-    if (screen) {
-        screen.classList.remove(
-            "hidden"
-        );
-    }
-}
-
-function stopGame() {
-    racing = false;
-    countdownRunning = false;
-
-    game.classList.remove(
-        "active"
+    setText(
+        "personal-best",
+        best === null
+            ? "--:--.---"
+            : formatTime(best)
     );
-
-    vehicle.reset();
-
-    showOnly(menu);
-
-    updateBestDisplay();
 }
 
-async function startRace() {
-    showOnly(null);
+function updateLeaderboardScreen() {
+    const list = $("leaderboard-list");
 
-    game.classList.add(
-        "active"
-    );
-
-    track.clear();
-
-    if (currentTrackName === "Mountain Run") {
-        track.buildDefault();
-    } else {
-        track.addPiece("straight");
-        track.addPiece("boost");
-        track.addPiece("straight");
-        track.addPiece("curveLeft");
-        track.addPiece("straight");
-        track.addPiece("ramp");
-        track.addPiece("curveRight");
-        track.addPiece("straight");
-        track.addPiece("bankLeft");
-        track.addPiece("straight");
+    if (!list) {
+        return;
     }
 
-    vehicle.reset();
+    list.innerHTML = "";
 
-    camera.position.set(
-        vehicle.group.position.x,
-        vehicle.group.position.y + 7,
-        vehicle.group.position.z - 13
-    );
+    const leaderboard =
+        getLeaderboard(currentTrackId);
 
-    countdownRunning = true;
+    if (leaderboard.length === 0) {
+        const empty = document.createElement("div");
 
-    countdownElement.textContent =
-        "3";
+        empty.className = "leaderboard-empty";
+        empty.textContent =
+            "No times recorded for this track.";
 
-    await delay(700);
+        list.appendChild(empty);
+        return;
+    }
 
-    countdownElement.textContent =
-        "2";
+    leaderboard.forEach((entry, index) => {
+        const row =
+            document.createElement("div");
 
-    await delay(700);
+        row.className = "leaderboard-row";
 
-    countdownElement.textContent =
-        "1";
+        const position =
+            document.createElement("span");
 
-    await delay(700);
+        position.textContent =
+            String(index + 1);
 
-    countdownElement.textContent =
-        "GO";
+        const time =
+            document.createElement("span");
 
-    raceStart =
-        performance.now();
+        time.textContent =
+            formatTime(entry.time);
 
-    racing = true;
-    countdownRunning = false;
+        row.appendChild(position);
+        row.appendChild(time);
 
-    await delay(500);
-
-    countdownElement.textContent =
-        "";
+        list.appendChild(row);
+    });
 }
 
-function delay(milliseconds) {
-    return new Promise(
-        resolve =>
-            setTimeout(
-                resolve,
-                milliseconds
+function hideAllScreens() {
+    show($("main-menu"), false);
+    show($("track-select"), false);
+    show($("leaderboard-screen"), false);
+    show($("builder-screen"), false);
+    show($("game-ui"), false);
+}
+
+function showMenu() {
+    gameState = "menu";
+    raceRunning = false;
+    raceFinished = false;
+
+    removePreview();
+
+    hideAllScreens();
+    show($("main-menu"), true);
+
+    updatePersonalBest();
+
+    if (track.environment) {
+        track.environment.visible = false;
+    }
+
+    track.group.visible = false;
+    track.startMarker.visible = false;
+    track.endMarker.visible = false;
+
+    vehicle.mesh.visible = false;
+}
+
+function showTrackSelect() {
+    gameState = "track-select";
+
+    hideAllScreens();
+    show($("track-select"), true);
+
+    if (track.environment) {
+        track.environment.visible = false;
+    }
+
+    track.group.visible = false;
+    track.startMarker.visible = false;
+    track.endMarker.visible = false;
+
+    vehicle.mesh.visible = false;
+}
+
+function showLeaderboard() {
+    gameState = "leaderboard";
+
+    hideAllScreens();
+    show($("leaderboard-screen"), true);
+
+    const title = $("leaderboard-title");
+
+    if (title) {
+        title.textContent =
+            `${currentTrackName} Leaderboard`;
+    }
+
+    updateLeaderboardScreen();
+
+    if (track.environment) {
+        track.environment.visible = false;
+    }
+
+    track.group.visible = false;
+    track.startMarker.visible = false;
+    track.endMarker.visible = false;
+
+    vehicle.mesh.visible = false;
+}
+
+function showBuilder() {
+    gameState = "builder";
+
+    raceRunning = false;
+    raceFinished = false;
+
+    hideAllScreens();
+
+    show($("builder-screen"), true);
+    show($("game-ui"), false);
+
+    loadCurrentTrack();
+
+    track.environment.visible = true;
+    track.group.visible = true;
+    track.startMarker.visible = true;
+    track.endMarker.visible = true;
+
+    vehicle.mesh.visible = false;
+
+    createPreview();
+
+    updateBuilderStatus();
+}
+
+function loadCurrentTrack() {
+    const definition =
+        TRACKS[currentTrackId];
+
+    if (!definition) {
+        return;
+    }
+
+    definition.build();
+}
+
+function startRace(trackId) {
+    if (!TRACKS[trackId]) {
+        return;
+    }
+
+    currentTrackId = Number(trackId);
+    currentTrackName =
+        TRACKS[currentTrackId].name;
+
+    gameState = "race";
+
+    raceRunning = false;
+    raceFinished = false;
+
+    raceTime = 0;
+    startTime = 0;
+
+    removePreview();
+
+    loadCurrentTrack();
+
+    track.environment.visible = true;
+    track.group.visible = true;
+    track.startMarker.visible = true;
+    track.endMarker.visible = true;
+
+    vehicle.mesh.visible = true;
+
+    const spawn =
+        track.getSpawn();
+
+    vehicle.reset(
+        spawn.position,
+        spawn.yaw
+    );
+
+    followCamera.reset();
+
+    countdown = 3;
+    countdownTimer = 0;
+
+    hideAllScreens();
+    show($("game-ui"), true);
+
+    setText("time", "0:00.000");
+    setText(
+        "best",
+        getPersonalBest(currentTrackId) === null
+            ? "--:--.---"
+            : formatTime(
+                getPersonalBest(currentTrackId)
             )
     );
+
+    updateCountdownText();
 }
 
-function updateTimer() {
-    if (!racing) {
+function updateCountdownText() {
+    const element = $("countdown");
+
+    if (!element) {
         return;
     }
 
-    const elapsed =
-        performance.now() -
-        raceStart;
-
-    timerElement.textContent =
-        formatTime(elapsed);
-
-    const finishDistance =
-        vehicle.group.position.distanceTo(
-            track.finishPosition
-        );
-
-    if (
-        finishDistance < 8 &&
-        elapsed > 5000
-    ) {
-        finishRace(elapsed);
+    if (countdown > 0) {
+        element.textContent =
+            String(countdown);
+        element.style.display = "";
+    } else if (countdown === 0) {
+        element.textContent = "GO";
+        element.style.display = "";
+    } else {
+        element.style.display = "none";
     }
 }
 
-function finishRace(time) {
-    if (!racing) {
+function finishRace() {
+    if (raceFinished) {
         return;
     }
 
-    racing = false;
-    finishTime = time;
+    raceFinished = true;
+    raceRunning = false;
 
-    saveTime(time);
+    saveTime(
+        currentTrackId,
+        raceTime
+    );
 
-    timerElement.textContent =
-        formatTime(time);
+    updatePersonalBest();
+    updateLeaderboardScreen();
 
-    updateBestDisplay();
+    setText(
+        "time",
+        formatTime(raceTime)
+    );
+
+    const countdownElement =
+        $("countdown");
+
+    if (countdownElement) {
+        countdownElement.textContent =
+            formatTime(raceTime);
+
+        countdownElement.style.display =
+            "";
+    }
 
     setTimeout(() => {
-        stopGame();
-    }, 1500);
+        if (gameState !== "race") {
+            return;
+        }
+
+        showMenu();
+    }, 2500);
 }
 
-function renderLeaderboard() {
-    const data =
-        getLeaderboard()
-            .filter(
-                item =>
-                    item.track ===
-                    currentTrackName
-            )
-            .slice(0, 10);
+function checkFinish() {
+    if (
+        !raceRunning ||
+        raceFinished
+    ) {
+        return;
+    }
 
-    leaderboardList.innerHTML = "";
+    const finish =
+        track.getFinish();
 
-    if (data.length === 0) {
-        leaderboardList.innerHTML =
-            "<div>No times recorded yet.</div>";
+    const distance =
+        vehicle.position.distanceTo(
+            finish
+        );
+
+    if (distance < 8) {
+        finishRace();
+    }
+}
+
+function createPreview() {
+    removePreview();
+
+    if (gameState !== "builder") {
+        return;
+    }
+
+    previewPiece =
+        track.createPreview(
+            selectedBuilderPiece
+        );
+
+    if (!previewPiece) {
+        return;
+    }
+
+    previewPiece.mesh.userData.isPreview =
+        true;
+
+    track.group.add(
+        previewPiece.mesh
+    );
+}
+
+function removePreview() {
+    if (!previewPiece) {
+        return;
+    }
+
+    if (
+        previewPiece.mesh.parent
+    ) {
+        previewPiece.mesh.parent.remove(
+            previewPiece.mesh
+        );
+    }
+
+    previewPiece = null;
+}
+
+function updatePreview() {
+    if (
+        gameState !== "builder"
+    ) {
+        return;
+    }
+
+    if (!previewPiece) {
+        createPreview();
+        return;
+    }
+
+    const connector =
+        track.getCurrentConnector();
+
+    const preview =
+        new THREE.Vector3();
+
+    preview.copy(
+        connector.position
+    );
+
+    previewPiece.mesh.position.set(
+        0,
+        0,
+        0
+    );
+
+    previewPiece.mesh.rotation.set(
+        0,
+        0,
+        0
+    );
+
+    previewPiece.mesh.traverse(
+        (object) => {
+            if (!object.isMesh) {
+                return;
+            }
+
+            object.material.opacity =
+                0.35;
+        }
+    );
+}
+
+function addBuilderPiece(type) {
+    if (gameState !== "builder") {
+        return;
+    }
+
+    const piece =
+        track.addPiece(type);
+
+    if (!piece) {
+        updateBuilderStatus(
+            "Cannot place piece here."
+        );
 
         return;
     }
 
-    data.forEach(
-        (entry, index) => {
-            const row =
-                document.createElement(
-                    "div"
-                );
+    selectedBuilderPiece = type;
 
-            row.className =
-                "leader-row";
+    createPreview();
 
-            row.innerHTML =
-                `
-                <span class="leader-position">
-                    ${index + 1}
-                </span>
-                <span class="leader-name">
-                    PLAYER
-                </span>
-                <span class="leader-time">
-                    ${formatTime(entry.time)}
-                </span>
-                `;
-
-            leaderboardList.appendChild(
-                row
-            );
-        }
-    );
+    updateBuilderStatus();
 }
 
-function setupBuilder() {
+function updateBuilderStatus(message = null) {
+    const status =
+        $("builder-status");
+
+    if (!status) {
+        return;
+    }
+
+    if (message) {
+        status.textContent =
+            message;
+
+        return;
+    }
+
+    const connector =
+        track.getCurrentConnector();
+
+    status.textContent =
+        `Pieces: ${track.pieces.length} | ` +
+        `End: ${connector.position.x.toFixed(1)}, ` +
+        `${connector.position.y.toFixed(1)}, ` +
+        `${connector.position.z.toFixed(1)}`;
+}
+
+function clearBuilder() {
+    if (gameState !== "builder") {
+        return;
+    }
+
     track.clear();
 
-    track.addPiece(
-        "straight"
-    );
+    createPreview();
 
-    builderStatus.textContent =
-        "Start piece placed. Select another piece to continue.";
+    updateBuilderStatus();
 }
 
-document
-    .getElementById("playButton")
-    .addEventListener(
-        "click",
-        () => {
-            showOnly(trackSelect);
-        }
+function testBuilderTrack() {
+    if (track.pieces.length === 0) {
+        updateBuilderStatus(
+            "Add at least one piece first."
+        );
+
+        return;
+    }
+
+    currentTrackName = "Custom Track";
+    currentTrackId = 0;
+
+    gameState = "race";
+
+    raceRunning = false;
+    raceFinished = false;
+
+    raceTime = 0;
+
+    removePreview();
+
+    track.environment.visible = true;
+    track.group.visible = true;
+    track.startMarker.visible = true;
+    track.endMarker.visible = true;
+
+    vehicle.mesh.visible = true;
+
+    const spawn =
+        track.getSpawn();
+
+    vehicle.reset(
+        spawn.position,
+        spawn.yaw
     );
 
-document
-    .getElementById("buildButton")
-    .addEventListener(
-        "click",
-        () => {
-            showOnly(builder);
-            setupBuilder();
-        }
+    followCamera.reset();
+
+    countdown = 3;
+    countdownTimer = 0;
+
+    hideAllScreens();
+    show($("game-ui"), true);
+
+    setText(
+        "time",
+        "0:00.000"
     );
 
-document
-    .getElementById("tracksButton")
-    .addEventListener(
-        "click",
-        () => {
-            showOnly(trackSelect);
-        }
+    setText(
+        "best",
+        "--:--.---"
     );
 
-document
-    .getElementById("leaderboardButton")
-    .addEventListener(
-        "click",
-        () => {
-            renderLeaderboard();
-            showOnly(leaderboard);
-        }
-    );
+    updateCountdownText();
+}
 
-document
-    .getElementById("trackBackButton")
-    .addEventListener(
-        "click",
-        () => {
-            showOnly(menu);
-        }
-    );
+function handleMenuButtons() {
+    const playButton =
+        $("play-button");
 
-document
-    .getElementById("leaderboardBackButton")
-    .addEventListener(
-        "click",
-        () => {
-            showOnly(menu);
-        }
-    );
+    if (playButton) {
+        playButton.addEventListener(
+            "click",
+            showTrackSelect
+        );
+    }
 
-document
-    .getElementById("pauseButton")
-    .addEventListener(
-        "click",
-        () => {
-            stopGame();
-        }
-    );
+    const buildButton =
+        $("build-button");
 
-document
-    .getElementById("builderBackButton")
-    .addEventListener(
-        "click",
-        () => {
-            showOnly(menu);
-        }
-    );
+    if (buildButton) {
+        buildButton.addEventListener(
+            "click",
+            showBuilder
+        );
+    }
 
-document
-    .getElementById("clearTrackButton")
-    .addEventListener(
-        "click",
-        () => {
-            setupBuilder();
-        }
-    );
+    const leaderboardButton =
+        $("leaderboard-button");
 
-document
-    .getElementById("testTrackButton")
-    .addEventListener(
-        "click",
-        () => {
-            currentTrackName =
-                "Custom Track";
-
-            startRace();
-        }
-    );
-
-document
-    .querySelectorAll(
-        ".track-option"
-    )
-    .forEach(button => {
-        button.addEventListener(
+    if (leaderboardButton) {
+        leaderboardButton.addEventListener(
             "click",
             () => {
-                currentTrackName =
-                    button.dataset.track ===
-                    "mountain"
-                        ? "Mountain Run"
-                        : "Speed Circuit";
-
-                startRace();
+                updateLeaderboardScreen();
+                showLeaderboard();
             }
         );
-    });
+    }
 
-document
-    .querySelectorAll(
-        "[data-piece]"
-    )
-    .forEach(button => {
-        button.addEventListener(
+    const menuButton =
+        $("menu-button");
+
+    if (menuButton) {
+        menuButton.addEventListener(
             "click",
-            () => {
-                const type =
-                    button.dataset.piece;
+            showMenu
+        );
+    }
 
-                const added =
-                    track.addPiece(type);
+    const backButton =
+        $("back-button");
 
-                if (added) {
-                    builderStatus.textContent =
-                        `${type} added to the end of the track.`;
-                } else {
-                    builderStatus.textContent =
-                        "Piece rejected because it would overlap an existing piece.";
+    if (backButton) {
+        backButton.addEventListener(
+            "click",
+            showMenu
+        );
+    }
+
+    const tracksBackButton =
+        $("tracks-back");
+
+    if (tracksBackButton) {
+        tracksBackButton.addEventListener(
+            "click",
+            showMenu
+        );
+    }
+
+    const leaderboardBackButton =
+        $("leaderboard-back");
+
+    if (leaderboardBackButton) {
+        leaderboardBackButton.addEventListener(
+            "click",
+            showMenu
+        );
+    }
+}
+
+function handleTrackButtons() {
+    document
+        .querySelectorAll(
+            "[data-track-id]"
+        )
+        .forEach((button) => {
+            button.addEventListener(
+                "click",
+                () => {
+                    const id =
+                        Number(
+                            button.dataset.trackId
+                        );
+
+                    if (
+                        !TRACKS[id]
+                    ) {
+                        return;
+                    }
+
+                    startRace(id);
                 }
+            );
+        });
+}
+
+function handleBuilderButtons() {
+    document
+        .querySelectorAll(
+            "[data-piece]"
+        )
+        .forEach((button) => {
+            button.addEventListener(
+                "click",
+                () => {
+                    const type =
+                        button.dataset.piece;
+
+                    selectedBuilderPiece =
+                        type;
+
+                    createPreview();
+
+                    updateBuilderStatus();
+                }
+            );
+        });
+
+    const testButton =
+        $("test-track");
+
+    if (testButton) {
+        testButton.addEventListener(
+            "click",
+            testBuilderTrack
+        );
+    }
+
+    const clearButton =
+        $("clear-track");
+
+    if (clearButton) {
+        clearButton.addEventListener(
+            "click",
+            clearBuilder
+        );
+    }
+
+    const builderBack =
+        $("builder-back");
+
+    if (builderBack) {
+        builderBack.addEventListener(
+            "click",
+            showMenu
+        );
+    }
+}
+
+function setupInput() {
+    window.addEventListener(
+        "keydown",
+        (event) => {
+            keys[event.code] = true;
+
+            if (
+                [
+                    "ArrowUp",
+                    "ArrowDown",
+                    "ArrowLeft",
+                    "ArrowRight",
+                    "Space"
+                ].includes(event.code)
+            ) {
+                event.preventDefault();
             }
+
+            if (
+                event.code === "KeyR" &&
+                gameState === "race"
+            ) {
+                const spawn =
+                    track.getSpawn();
+
+                vehicle.reset(
+                    spawn.position,
+                    spawn.yaw
+                );
+
+                followCamera.reset();
+            }
+        }
+    );
+
+    window.addEventListener(
+        "keyup",
+        (event) => {
+            keys[event.code] = false;
+        }
+    );
+}
+
+function getVehicleInput() {
+    return {
+        throttle:
+            Boolean(
+                keys.KeyW ||
+                keys.ArrowUp
+            ),
+
+        brake:
+            Boolean(
+                keys.KeyS ||
+                keys.ArrowDown
+            ),
+
+        left:
+            Boolean(
+                keys.KeyA ||
+                keys.ArrowLeft
+            ),
+
+        right:
+            Boolean(
+                keys.KeyD ||
+                keys.ArrowRight
+            )
+    };
+}
+
+function updateRace(delta) {
+    if (!raceRunning) {
+        return;
+    }
+
+    raceTime =
+        (performance.now() -
+            startTime) /
+        1000;
+
+    setText(
+        "time",
+        formatTime(raceTime)
+    );
+
+    const input =
+        getVehicleInput();
+
+    vehicle.update(
+        input,
+        delta,
+        track
+    );
+
+    checkFinish();
+}
+
+function updateCountdown(delta) {
+    if (
+        gameState !== "race" ||
+        raceRunning
+    ) {
+        return;
+    }
+
+    countdownTimer += delta;
+
+    if (
+        countdownTimer >= 1
+    ) {
+        countdownTimer -= 1;
+
+        countdown -= 1;
+
+        updateCountdownText();
+
+        if (countdown < 0) {
+            raceRunning = true;
+            raceFinished = false;
+
+            startTime =
+                performance.now();
+
+            countdown = -1;
+
+            updateCountdownText();
+        }
+    }
+}
+
+function updateGame(delta) {
+    if (
+        gameState !== "race"
+    ) {
+        return;
+    }
+
+    updateCountdown(delta);
+
+    if (raceRunning) {
+        updateRace(delta);
+    }
+
+    followCamera.update(
+        vehicle,
+        delta
+    );
+
+    const speed =
+        Math.abs(
+            vehicle.speed || 0
         );
-    });
 
-window.addEventListener(
-    "keydown",
-    event => {
-        if (
-            event.code === "KeyW" ||
-            event.code === "ArrowUp"
-        ) {
-            keys.forward = true;
-        }
+    setText(
+        "speed",
+        `${Math.round(speed * 3.6)} km/h`
+    );
+}
 
-        if (
-            event.code === "KeyS" ||
-            event.code === "ArrowDown"
-        ) {
-            keys.backward = true;
-        }
+function resize() {
+    camera.aspect =
+        window.innerWidth /
+        window.innerHeight;
 
-        if (
-            event.code === "KeyA" ||
-            event.code === "ArrowLeft"
-        ) {
-            keys.left = true;
-        }
+    camera.updateProjectionMatrix();
 
-        if (
-            event.code === "KeyD" ||
-            event.code === "ArrowRight"
-        ) {
-            keys.right = true;
-        }
-
-        if (
-            event.code === "KeyR" &&
-            game.classList.contains("active")
-        ) {
-            vehicle.reset();
-        }
-    }
-);
-
-window.addEventListener(
-    "keyup",
-    event => {
-        if (
-            event.code === "KeyW" ||
-            event.code === "ArrowUp"
-        ) {
-            keys.forward = false;
-        }
-
-        if (
-            event.code === "KeyS" ||
-            event.code === "ArrowDown"
-        ) {
-            keys.backward = false;
-        }
-
-        if (
-            event.code === "KeyA" ||
-            event.code === "ArrowLeft"
-        ) {
-            keys.left = false;
-        }
-
-        if (
-            event.code === "KeyD" ||
-            event.code === "ArrowRight"
-        ) {
-            keys.right = false;
-        }
-    }
-);
-
-window.addEventListener(
-    "resize",
-    () => {
-        camera.aspect =
-            window.innerWidth /
-            window.innerHeight;
-
-        camera.updateProjectionMatrix();
-
-        renderer.setSize(
-            window.innerWidth,
-            window.innerHeight
-        );
-    }
-);
-
-let previousTime =
-    performance.now();
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+}
 
 function animate() {
     requestAnimationFrame(
         animate
     );
 
-    const now =
-        performance.now();
-
     const delta =
         Math.min(
-            (now - previousTime) / 1000,
+            clock.getDelta(),
             0.05
         );
 
-    previousTime = now;
-
-    if (
-        game.classList.contains(
-            "active"
-        ) &&
-        !countdownRunning
-    ) {
-        vehicle.update(
-            delta,
-            keys
-        );
-
-        followCamera.update(
-            vehicle,
-            delta
-        );
-
-        speedElement.textContent =
-            `${vehicle.getSpeedKmh()} KM/H`;
-
-        updateTimer();
-    }
+    updateGame(delta);
+    updatePreview();
 
     renderer.render(
         scene,
@@ -732,6 +1049,71 @@ function animate() {
     );
 }
 
-updateBestDisplay();
+function setupScene() {
+    const ambient =
+        new THREE.HemisphereLight(
+            0xb8c7d8,
+            0x20251f,
+            1.7
+        );
 
-animate();
+    scene.add(ambient);
+
+    const sun =
+        new THREE.DirectionalLight(
+            0xffffff,
+            2.2
+        );
+
+    sun.position.set(
+        150,
+        250,
+        100
+    );
+
+    sun.castShadow = true;
+
+    sun.shadow.mapSize.width = 2048;
+    sun.shadow.mapSize.height = 2048;
+
+    sun.shadow.camera.left = -250;
+    sun.shadow.camera.right = 250;
+    sun.shadow.camera.top = 250;
+    sun.shadow.camera.bottom = -250;
+
+    scene.add(sun);
+
+    camera.position.set(
+        0,
+        12,
+        -20
+    );
+}
+
+function initialize() {
+    setupScene();
+    setupInput();
+    handleMenuButtons();
+    handleTrackButtons();
+    handleBuilderButtons();
+
+    track.environment.visible = false;
+    track.group.visible = false;
+    track.startMarker.visible = false;
+    track.endMarker.visible = false;
+
+    vehicle.mesh.visible = false;
+
+    updatePersonalBest();
+
+    showMenu();
+
+    window.addEventListener(
+        "resize",
+        resize
+    );
+
+    animate();
+}
+
+initialize();
