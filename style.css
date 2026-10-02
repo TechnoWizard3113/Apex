@@ -179,10 +179,18 @@ button {
     pointer-events: none;
 }
 
+#game canvas {
+    pointer-events: none;
+}
+
 #hud {
     position: absolute;
     inset: 0;
     pointer-events: none;
+}
+
+#pauseButton {
+    pointer-events: auto;
 }
 
 .hud-top {

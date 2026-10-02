@@ -22,6 +22,12 @@ const clearTrackButton =
 const builderBackButton =
     document.getElementById("builderBackButton");
 
+const undoButton =
+    document.getElementById("undoButton");
+
+const redoButton =
+    document.getElementById("redoButton");
+
 const builderStatus =
     document.getElementById("builderStatus");
 
@@ -43,87 +49,31 @@ const checkpointElement =
 const countdownElement =
     document.getElementById("countdown");
 
-const renderer =
-    new THREE.WebGLRenderer({
-        antialias: true
-    });
+let currentMode = "menu";
+let currentTrackId = 1;
 
-renderer.setPixelRatio(
-    Math.min(window.devicePixelRatio, 2)
-);
+let track = null;
+let vehicle = null;
+let followCamera = null;
+let renderer = null;
+let camera = null;
+let scene = null;
 
-renderer.setSize(
-    window.innerWidth,
-    window.innerHeight
-);
+let raceStarted = false;
+let raceFinished = false;
+let raceStartTime = 0;
 
-renderer.shadowMap.enabled = true;
+let bestTime = null;
+let checkpoint = 0;
 
-renderer.domElement.style.position = "absolute";
-renderer.domElement.style.inset = "0";
-renderer.domElement.style.pointerEvents = "none";
+let builderPieceType = null;
+let builderRotation = 0;
+let builderPreview = null;
 
-game.appendChild(renderer.domElement);
+let undoStack = [];
+let redoStack = [];
 
-const scene =
-    new THREE.Scene();
-
-scene.background =
-    new THREE.Color(0x10151c);
-
-const camera =
-    new THREE.PerspectiveCamera(
-        68,
-        window.innerWidth /
-            window.innerHeight,
-        0.1,
-        5000
-    );
-
-camera.position.set(
-    0,
-    10,
-    -20
-);
-
-const ambientLight =
-    new THREE.HemisphereLight(
-        0xffffff,
-        0x243020,
-        1.6
-    );
-
-scene.add(
-    ambientLight
-);
-
-const sun =
-    new THREE.DirectionalLight(
-        0xffffff,
-        2.2
-    );
-
-sun.position.set(
-    100,
-    150,
-    80
-);
-
-sun.castShadow = true;
-
-sun.shadow.mapSize.width = 2048;
-sun.shadow.mapSize.height = 2048;
-
-scene.add(sun);
-
-const track =
-    new Track(scene);
-
-const vehicle =
-    new Vehicle(scene);
-
-const followCamera =
-    new FollowCamera(camera);
+let lastFrameTime = performance.now();
 
 const controls = {
     throttle: false,
@@ -132,39 +82,10 @@ const controls = {
     right: false
 };
 
-let currentMode = "menu";
-
-let currentTrackId = 1;
-
-let raceStarted = false;
-let raceFinished = false;
-let raceStartTime = 0;
-let finalRaceTime = 0;
-
-let bestTime =
-    Number(
-        localStorage.getItem(
-            "apex-best-track-" +
-            currentTrackId
-        )
-    ) || null;
-
-let checkpoint = 1;
-
-let builderPieceType = null;
-let builderPreview = null;
-let builderPreviewRotation = 0;
-
-let builderHistory = [];
-
-let lastFrameTime =
-    performance.now();
-
 function showScreen(screen) {
     menu.classList.add("hidden");
     trackSelect.classList.add("hidden");
     builder.classList.add("hidden");
-    game.classList.remove("active");
 
     if (screen === menu) {
         menu.classList.remove("hidden");
@@ -184,13 +105,11 @@ function showScreen(screen) {
 }
 
 function formatTime(milliseconds) {
-    if (
-        !Number.isFinite(milliseconds)
-    ) {
+    if (!Number.isFinite(milliseconds)) {
         return "--:--.---";
     }
 
-    const totalMilliseconds =
+    const total =
         Math.max(
             0,
             Math.floor(milliseconds)
@@ -198,20 +117,16 @@ function formatTime(milliseconds) {
 
     const minutes =
         Math.floor(
-            totalMilliseconds / 60000
+            total / 60000
         );
 
     const seconds =
         Math.floor(
-            (
-                totalMilliseconds %
-                60000
-            ) / 1000
+            (total % 60000) / 1000
         );
 
     const millis =
-        totalMilliseconds %
-        1000;
+        total % 1000;
 
     return (
         String(minutes).padStart(2, "0") +
@@ -222,14 +137,139 @@ function formatTime(milliseconds) {
     );
 }
 
-function updateBestDisplay() {
+function loadBestTime() {
+    const stored =
+        localStorage.getItem(
+            "apex-best-track-" +
+            currentTrackId
+        );
+
+    bestTime =
+        stored === null
+            ? null
+            : Number(stored);
+
     bestTimeElement.textContent =
         bestTime === null
             ? "--:--.---"
             : formatTime(bestTime);
 }
 
+function initializeGame() {
+    if (renderer) {
+        return;
+    }
+
+    scene =
+        new THREE.Scene();
+
+    scene.background =
+        new THREE.Color(
+            0x10151c
+        );
+
+    camera =
+        new THREE.PerspectiveCamera(
+            68,
+            window.innerWidth /
+                window.innerHeight,
+            0.1,
+            5000
+        );
+
+    camera.position.set(
+        0,
+        10,
+        -20
+    );
+
+    renderer =
+        new THREE.WebGLRenderer({
+            antialias: true
+        });
+
+    renderer.setPixelRatio(
+        Math.min(
+            window.devicePixelRatio,
+            2
+        )
+    );
+
+    renderer.setSize(
+        window.innerWidth,
+        window.innerHeight
+    );
+
+    renderer.shadowMap.enabled =
+        true;
+
+    renderer.domElement.style.position =
+        "absolute";
+
+    renderer.domElement.style.inset =
+        "0";
+
+    renderer.domElement.style.pointerEvents =
+        "none";
+
+    game.appendChild(
+        renderer.domElement
+    );
+
+    const ambient =
+        new THREE.HemisphereLight(
+            0xffffff,
+            0x243020,
+            1.6
+        );
+
+    scene.add(ambient);
+
+    const sun =
+        new THREE.DirectionalLight(
+            0xffffff,
+            2.2
+        );
+
+    sun.position.set(
+        100,
+        150,
+        80
+    );
+
+    sun.castShadow = true;
+
+    sun.shadow.mapSize.width =
+        2048;
+
+    sun.shadow.mapSize.height =
+        2048;
+
+    scene.add(sun);
+
+    track =
+        new Track(scene);
+
+    vehicle =
+        new Vehicle(scene);
+
+    followCamera =
+        new FollowCamera(camera);
+
+    loadTrack(
+        currentTrackId
+    );
+
+    requestAnimationFrame(
+        animate
+    );
+}
+
 function loadTrack(id) {
+    if (!track) {
+        return;
+    }
+
     currentTrackId = id;
 
     if (id === 1) {
@@ -238,20 +278,16 @@ function loadTrack(id) {
         track.buildSpeedCircuit();
     }
 
-    bestTime =
-        Number(
-            localStorage.getItem(
-                "apex-best-track-" +
-                currentTrackId
-            )
-        ) || null;
-
-    updateBestDisplay();
+    loadBestTime();
 
     resetRace();
 }
 
 function resetRace() {
+    if (!track || !vehicle) {
+        return;
+    }
+
     const spawn =
         track.getSpawn();
 
@@ -260,13 +296,14 @@ function resetRace() {
         spawn.yaw
     );
 
-    followCamera.reset();
+    if (followCamera) {
+        followCamera.reset();
+    }
 
     raceStarted = false;
     raceFinished = false;
     raceStartTime = 0;
-    finalRaceTime = 0;
-    checkpoint = 1;
+    checkpoint = 0;
 
     timerElement.textContent =
         "00:00.000";
@@ -275,13 +312,16 @@ function resetRace() {
         "0 KM/H";
 
     checkpointElement.textContent =
-        "CHECKPOINT 1";
+        "CHECKPOINT 0/" +
+        track.checkpoints.length;
 
     countdownElement.textContent =
         "";
 }
 
 function startRace() {
+    initializeGame();
+
     resetRace();
 
     currentMode = "race";
@@ -307,27 +347,94 @@ function runCountdown() {
         values[index];
 
     const interval =
-        setInterval(() => {
-            index += 1;
+        setInterval(
+            () => {
+                index++;
 
-            if (
-                index >= values.length
-            ) {
-                clearInterval(interval);
+                if (
+                    index >=
+                    values.length
+                ) {
+                    clearInterval(
+                        interval
+                    );
+
+                    countdownElement.textContent =
+                        "";
+
+                    raceStarted = true;
+
+                    raceStartTime =
+                        performance.now();
+
+                    return;
+                }
 
                 countdownElement.textContent =
-                    "";
+                    values[index];
+            },
+            750
+        );
+}
 
-                raceStarted = true;
-                raceStartTime =
-                    performance.now();
+function checkCheckpoints() {
+    if (!track || !vehicle) {
+        return;
+    }
 
-                return;
-            }
+    if (
+        checkpoint >=
+        track.checkpoints.length
+    ) {
+        return;
+    }
 
-            countdownElement.textContent =
-                values[index];
-        }, 750);
+    const target =
+        track.checkpoints[
+            checkpoint
+        ];
+
+    const distance =
+        vehicle.position.distanceTo(
+            target
+        );
+
+    if (distance < 12) {
+        checkpoint++;
+
+        checkpointElement.textContent =
+            "CHECKPOINT " +
+            checkpoint +
+            "/" +
+            track.checkpoints.length;
+    }
+}
+
+function checkFinish() {
+    if (!track || !vehicle) {
+        return;
+    }
+
+    if (
+        checkpoint <
+        track.checkpoints.length
+    ) {
+        return;
+    }
+
+    const finish =
+        track.getFinish();
+
+    const distance =
+        vehicle.position.distanceTo(
+            finish
+        );
+
+    if (
+        distance < 12
+    ) {
+        finishRace();
+    }
 }
 
 function finishRace() {
@@ -340,52 +447,46 @@ function finishRace() {
 
     raceFinished = true;
 
-    finalRaceTime =
+    const time =
         performance.now() -
         raceStartTime;
 
     timerElement.textContent =
-        formatTime(finalRaceTime);
+        formatTime(time);
 
     if (
         bestTime === null ||
-        finalRaceTime < bestTime
+        time < bestTime
     ) {
-        bestTime =
-            finalRaceTime;
+        bestTime = time;
 
         localStorage.setItem(
             "apex-best-track-" +
             currentTrackId,
-            String(bestTime)
+            String(time)
         );
 
-        updateBestDisplay();
-    }
-}
-
-function checkFinish() {
-    const finish =
-        track.getFinish();
-
-    const distance =
-        vehicle.position.distanceTo(
-            finish
-        );
-
-    if (
-        distance < 10
-    ) {
-        finishRace();
+        bestTimeElement.textContent =
+            formatTime(time);
     }
 }
 
 function updateRace(delta) {
+    if (!vehicle || !track) {
+        return;
+    }
+
     vehicle.update(
         delta,
         controls,
         track
     );
+
+    speedElement.textContent =
+        Math.round(
+            vehicle.speed * 3.6
+        ) +
+        " KM/H";
 
     if (
         raceStarted &&
@@ -398,42 +499,109 @@ function updateRace(delta) {
         timerElement.textContent =
             formatTime(elapsed);
 
+        checkCheckpoints();
         checkFinish();
     }
 
-    speedElement.textContent =
-        Math.round(
-            vehicle.speed * 3.6
-        ) +
-        " KM/H";
+    followCamera.update(
+        vehicle,
+        delta
+    );
 }
 
-function removePreview() {
+function enterBuilder() {
+    initializeGame();
+
+    currentMode = "builder";
+
+    showScreen(builder);
+
+    track.clear();
+
+    builderPieceType = null;
+    builderRotation = 0;
+
+    undoStack = [];
+    redoStack = [];
+
+    removeBuilderPreview();
+
+    builderStatus.textContent =
+        "Select a piece.";
+}
+
+function createBuilderPreview(
+    type
+) {
+    if (!track) {
+        return;
+    }
+
+    removeBuilderPreview();
+
+    builderPieceType = type;
+    builderRotation = 0;
+
+    builderPreview =
+        track.createPreview(
+            type,
+            builderRotation
+        );
+
+    scene.add(
+        builderPreview.group
+    );
+
+    updateBuilderPreview();
+
+    builderStatus.textContent =
+        "Q/E rotate. ENTER place. ESC cancel.";
+}
+
+function removeBuilderPreview() {
     if (
-        builderPreview
+        builderPreview &&
+        builderPreview.group
     ) {
         scene.remove(
             builderPreview.group
         );
-
-        builderPreview = null;
     }
 
-    builderPieceType = null;
-    builderPreviewRotation = 0;
+    builderPreview = null;
 }
 
-function setPreviewOpacity(
-    valid
-) {
+function updateBuilderPreview() {
     if (
-        !builderPreview
+        !builderPreview ||
+        !builderPieceType ||
+        !track
     ) {
         return;
     }
 
+    scene.remove(
+        builderPreview.group
+    );
+
+    builderPreview =
+        track.createPreview(
+            builderPieceType,
+            builderRotation
+        );
+
+    scene.add(
+        builderPreview.group
+    );
+
+    const valid =
+        track.canAdd(
+            builderPieceType,
+            builderRotation
+        );
+
     builderPreview.group.traverse(
-        (object) => {
+        object => {
             if (
                 !object.isMesh
             ) {
@@ -447,162 +615,35 @@ function setPreviewOpacity(
                 true;
 
             object.material.opacity =
-                valid
-                    ? 0.45
-                    : 0.22;
+                0.45;
 
             object.material.depthWrite =
                 false;
 
-            if (
-                object.material.color
-            ) {
-                object.material.color.set(
-                    valid
-                        ? 0x35c77a
-                        : 0xd83232
-                );
-            }
+            object.material.color.set(
+                valid
+                    ? 0x32d583
+                    : 0xd83232
+            );
         }
     );
-}
-
-function createBuilderPreview(
-    type
-) {
-    removePreview();
-
-    builderPieceType = type;
-
-    builderPreviewRotation = 0;
-
-    builderPreview =
-        track.createPreview(
-            type
-        );
-
-    scene.add(
-        builderPreview.group
-    );
-
-    updateBuilderPreview();
-
-    builderStatus.textContent =
-        "Q/E rotate. ENTER place. ESC cancel.";
-}
-
-function updateBuilderPreview() {
-    if (
-        !builderPreview
-    ) {
-        return;
-    }
-
-    const connector =
-        track.getCurrentConnector();
-
-    const original =
-        builderPreview;
-
-    const oldGroup =
-        original.group;
-
-    scene.remove(
-        oldGroup
-    );
-
-    const newPreview =
-        track.createPreview(
-            builderPieceType
-        );
-
-    const yaw =
-        connector.yaw +
-        builderPreviewRotation;
-
-    newPreview.start.yaw =
-        yaw;
-
-    newPreview.end.yaw =
-        yaw;
-
-    newPreview.group.rotation.y =
-        builderPreviewRotation;
-
-    scene.add(
-        newPreview.group
-    );
-
-    builderPreview =
-        newPreview;
-
-    const valid =
-        isPreviewValid(
-            builderPreview
-        );
-
-    setPreviewOpacity(
-        valid
-    );
-}
-
-function isPreviewValid(
-    preview
-) {
-    if (
-        !preview
-    ) {
-        return false;
-    }
-
-    const testPiece =
-        preview;
-
-    for (
-        const existing
-        of track.pieces
-    ) {
-        const a =
-            track.pieceBounds(
-                existing
-            );
-
-        const b =
-            track.pieceBounds(
-                testPiece
-            );
-
-        const distance =
-            a.center.distanceTo(
-                b.center
-            );
-
-        if (
-            distance <
-            a.radius +
-            b.radius -
-            8
-        ) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 function placeBuilderPiece() {
     if (
-        !builderPreview ||
-        !builderPieceType
+        !builderPieceType ||
+        !track
     ) {
         return;
     }
 
-    if (
-        !isPreviewValid(
-            builderPreview
-        )
-    ) {
+    const valid =
+        track.canAdd(
+            builderPieceType,
+            builderRotation
+        );
+
+    if (!valid) {
         builderStatus.textContent =
             "Invalid placement.";
 
@@ -611,21 +652,26 @@ function placeBuilderPiece() {
 
     const piece =
         track.addPiece(
-            builderPieceType
+            builderPieceType,
+            builderRotation
         );
 
-    if (
-        !piece
-    ) {
+    if (!piece) {
         builderStatus.textContent =
             "Invalid placement.";
 
         return;
     }
 
-    builderHistory.push(
-        piece
-    );
+    undoStack.push({
+        type:
+            builderPieceType,
+
+        rotation:
+            builderRotation
+    });
+
+    redoStack = [];
 
     builderStatus.textContent =
         "Piece placed.";
@@ -635,9 +681,29 @@ function placeBuilderPiece() {
     );
 }
 
-function undoBuilderPiece() {
+function rebuildFromHistory() {
+    if (!track) {
+        return;
+    }
+
+    track.clear();
+
+    for (
+        const entry
+        of undoStack
+    ) {
+        track.addPiece(
+            entry.type,
+            entry.rotation
+        );
+    }
+
+    updateBuilderPreview();
+}
+
+function undoBuilder() {
     if (
-        builderHistory.length === 0
+        undoStack.length === 0
     ) {
         builderStatus.textContent =
             "Nothing to undo.";
@@ -645,62 +711,89 @@ function undoBuilderPiece() {
         return;
     }
 
-    const piece =
-        builderHistory.pop();
+    const removed =
+        undoStack.pop();
 
-    const index =
-        track.pieces.indexOf(
-            piece
-        );
+    redoStack.push(
+        removed
+    );
 
-    if (
-        index !== -1
-    ) {
-        track.pieces.splice(
-            index,
-            1
-        );
-
-        track.group.remove(
-            piece.group
-        );
-    }
-
-    track.updateMarkers();
-
-    if (
-        builderPieceType
-    ) {
-        createBuilderPreview(
-            builderPieceType
-        );
-    }
+    rebuildFromHistory();
 
     builderStatus.textContent =
         "Last piece removed.";
 }
 
+function redoBuilder() {
+    if (
+        redoStack.length === 0
+    ) {
+        builderStatus.textContent =
+            "Nothing to redo.";
+
+        return;
+    }
+
+    const entry =
+        redoStack.pop();
+
+    const valid =
+        track.canAdd(
+            entry.type,
+            entry.rotation
+        );
+
+    if (!valid) {
+        builderStatus.textContent =
+            "Cannot redo this piece.";
+
+        return;
+    }
+
+    undoStack.push(
+        entry
+    );
+
+    rebuildFromHistory();
+
+    builderStatus.textContent =
+        "Piece restored.";
+}
+
 function clearBuilder() {
-    removePreview();
+    if (!track) {
+        return;
+    }
 
     track.clear();
 
-    builderHistory = [];
+    undoStack = [];
+    redoStack = [];
+
+    removeBuilderPreview();
+
+    builderPieceType = null;
+    builderRotation = 0;
 
     builderStatus.textContent =
         "Track cleared. Select a piece.";
 }
 
-function enterBuilder() {
-    currentMode = "builder";
-
-    showScreen(builder);
-
-    clearBuilder();
-}
-
 function testBuilderTrack() {
-    removePreview();
+    if (!track) {
+        return;
+    }
+
+    if (
+        track.pieces.length < 2
+    ) {
+        builderStatus.textContent =
+            "Add at least two pieces first.";
+
+        return;
+    }
+
+    removeBuilderPreview();
 
     currentMode = "race";
 
@@ -712,7 +805,7 @@ function testBuilderTrack() {
 }
 
 function returnToMenu() {
-    removePreview();
+    removeBuilderPreview();
 
     currentMode = "menu";
 
@@ -722,6 +815,7 @@ function returnToMenu() {
 playButton.addEventListener(
     "click",
     () => {
+        initializeGame();
         loadTrack(1);
         startRace();
     }
@@ -737,15 +831,21 @@ buildButton.addEventListener(
 tracksButton.addEventListener(
     "click",
     () => {
-        currentMode = "trackSelect";
-        showScreen(trackSelect);
+        currentMode =
+            "trackSelect";
+
+        showScreen(
+            trackSelect
+        );
     }
 );
 
 trackBackButton.addEventListener(
     "click",
     () => {
-        currentMode = "menu";
+        currentMode =
+            "menu";
+
         showScreen(menu);
     }
 );
@@ -755,7 +855,7 @@ document
         ".track-option"
     )
     .forEach(
-        (button) => {
+        button => {
             button.addEventListener(
                 "click",
                 () => {
@@ -763,6 +863,8 @@ document
                         Number(
                             button.dataset.trackId
                         );
+
+                    initializeGame();
 
                     loadTrack(id);
 
@@ -777,15 +879,12 @@ document
         ".piece-buttons button"
     )
     .forEach(
-        (button) => {
+        button => {
             button.addEventListener(
                 "click",
                 () => {
-                    const type =
-                        button.dataset.piece;
-
                     createBuilderPreview(
-                        type
+                        button.dataset.piece
                     );
                 }
             );
@@ -794,47 +893,51 @@ document
 
 testTrackButton.addEventListener(
     "click",
-    () => {
-        testBuilderTrack();
-    }
+    testBuilderTrack
 );
 
 clearTrackButton.addEventListener(
     "click",
-    () => {
-        clearBuilder();
-    }
+    clearBuilder
+);
+
+undoButton.addEventListener(
+    "click",
+    undoBuilder
+);
+
+redoButton.addEventListener(
+    "click",
+    redoBuilder
 );
 
 builderBackButton.addEventListener(
     "click",
-    () => {
-        returnToMenu();
-    }
+    returnToMenu
 );
 
 pauseButton.addEventListener(
     "click",
-    () => {
-        returnToMenu();
-    }
+    returnToMenu
 );
 
 window.addEventListener(
     "keydown",
-    (event) => {
+    event => {
         const key =
             event.key.toLowerCase();
 
         if (
-            currentMode === "builder"
+            currentMode ===
+            "builder"
         ) {
             if (
-                key === "q"
+                key === "q" &&
+                builderPreview
             ) {
                 event.preventDefault();
 
-                builderPreviewRotation -=
+                builderRotation -=
                     Math.PI / 12;
 
                 updateBuilderPreview();
@@ -843,11 +946,12 @@ window.addEventListener(
             }
 
             if (
-                key === "e"
+                key === "e" &&
+                builderPreview
             ) {
                 event.preventDefault();
 
-                builderPreviewRotation +=
+                builderRotation +=
                     Math.PI / 12;
 
                 updateBuilderPreview();
@@ -866,37 +970,36 @@ window.addEventListener(
             }
 
             if (
-                key === "z"
-            ) {
-                event.preventDefault();
-
-                undoBuilderPiece();
-
-                return;
-            }
-
-            if (
-                key === "x"
-            ) {
-                event.preventDefault();
-
-                removePreview();
-
-                builderStatus.textContent =
-                    "Preview deleted.";
-
-                return;
-            }
-
-            if (
                 event.key === "Escape"
             ) {
                 event.preventDefault();
 
-                removePreview();
+                removeBuilderPreview();
+
+                builderPieceType = null;
 
                 builderStatus.textContent =
                     "Preview cancelled.";
+
+                return;
+            }
+
+            if (
+                key === "z"
+            ) {
+                event.preventDefault();
+
+                undoBuilder();
+
+                return;
+            }
+
+            if (
+                key === "y"
+            ) {
+                event.preventDefault();
+
+                redoBuilder();
 
                 return;
             }
@@ -934,7 +1037,7 @@ window.addEventListener(
 
 window.addEventListener(
     "keyup",
-    (event) => {
+    event => {
         const key =
             event.key.toLowerCase();
 
@@ -971,6 +1074,10 @@ window.addEventListener(
 window.addEventListener(
     "resize",
     () => {
+        if (!camera || !renderer) {
+            return;
+        }
+
         camera.aspect =
             window.innerWidth /
             window.innerHeight;
@@ -994,34 +1101,29 @@ function animate() {
 
     const delta =
         Math.min(
-            (now -
-                lastFrameTime) /
+            (now - lastFrameTime) /
                 1000,
             0.05
         );
 
-    lastFrameTime =
-        now;
+    lastFrameTime = now;
 
     if (
         currentMode === "race"
     ) {
         updateRace(delta);
-
-        followCamera.update(
-            vehicle,
-            delta
-        );
     }
 
-    renderer.render(
-        scene,
+    if (
+        renderer &&
+        scene &&
         camera
-    );
+    ) {
+        renderer.render(
+            scene,
+            camera
+        );
+    }
 }
 
-loadTrack(1);
-
 showScreen(menu);
-
-animate();
