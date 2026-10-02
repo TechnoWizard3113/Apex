@@ -1,6 +1,8 @@
-const button = document.getElementById("testButton");
+const playButton = document.getElementById("testButton");
 const result = document.getElementById("result");
 
-button.addEventListener("click", () => {
-    result.textContent = "MODULE JAVASCRIPT WORKS";
+playButton.addEventListener("click", () => {
+    result.textContent = "MAIN.JS STYLE TEST WORKS";
 });
+
+console.log("JavaScript module loaded successfully.");
