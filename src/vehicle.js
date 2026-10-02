@@ -1,1 +1,38 @@
-import*as THREE from'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';export class Vehicle{constructor(s,a){this.s=s;this.a=a;this.g=new THREE.Group;this.s.add(this.g);this.pos=new THREE.Vector3;this.speed=0;this.yaw=0;this.build()}build(){this.g.clear();let bm=new THREE.MeshStandardMaterial({color:this.a.bodyColor,roughness:.45}),am=new THREE.MeshStandardMaterial({color:this.a.accentColor}),w=this.a.wheelStyle==='dark'?0x111317:this.a.wheelStyle==='classic'?0x9ca4ad:0x252a30;let body=new THREE.Mesh(new THREE.BoxGeometry(this.a.bodyStyle==='wide'?3.2:2.7,.85,this.a.bodyStyle==='arrow'?4.2:4.5),bm);body.position.y=.8;body.castShadow=true;this.g.add(body);let nose=new THREE.Mesh(new THREE.BoxGeometry(2.2,.35,1.4),am);nose.position.set(0,1.15,1.3);this.g.add(nose);for(let x of[-1.35,1.35])for(let z of[-1.35,1.35]){let q=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,.28,16),new THREE.MeshStandardMaterial({color:w}));q.rotation.z=Math.PI/2;q.position.set(x,.42,z);this.g.add(q)}}setAppearance(a){this.a={...this.a,...a};this.build()}reset(p,y){this.pos.copy(p);this.pos.y+=.8;this.yaw=y;this.speed=0;this.g.position.copy(this.pos);this.g.rotation.y=y}update(dt,c){let th=c.throttle?1:0,br=c.brake?1:0,st=(c.right?1:0)-(c.left?1:0);this.speed+=((th?34:0)-(br?45:0))*dt;this.speed-=this.speed*(th?.45:1.2)*dt;this.speed=THREE.MathUtils.clamp(this.speed,0,72);this.yaw+=st*Math.min(1,this.speed/20)*1.7*dt;let f=new THREE.Vector3(Math.sin(this.yaw),0,Math.cos(this.yaw));this.pos.addScaledVector(f,this.speed*dt);this.pos.y+=(1.8-this.pos.y)*Math.min(1,dt*8);this.g.position.copy(this.pos);this.g.rotation.y=this.yaw}}
+const P = 'apex-v2-';
+const d = {
+  settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true, showCheckpoints: true },
+  vehicle: { bodyColor: '#2f8cff', accentColor: '#ffffff', bodyStyle: 'apex', wheelStyle: 'sport' }
+};
+
+const r = (k, f) => {
+  try {
+    const x = localStorage.getItem(P + k);
+    return x == null ? f : JSON.parse(x);
+  } catch {
+    return f;
+  }
+};
+
+const w = (k, v) => localStorage.setItem(P + k, JSON.stringify(v));
+
+export const settings = () => ({ ...d.settings, ...r('settings', {}) });
+export const saveSettings = x => w('settings', x);
+export const vehicle = () => ({ ...d.vehicle, ...r('vehicle', {}) });
+export const saveVehicle = x => w('vehicle', x);
+export const scores = id => r('scores-' + id, []);
+
+export const score = (id, t) => {
+  let a = [...scores(id), { name: 'YOU', time: t }].sort((a, b) => a.time - b.time).slice(0, 20);
+  w('scores-' + id, a);
+  return a;
+};
+
+export const custom = () => r('custom', []);
+export const saveCustom = x => w('custom', x);
+
+export const reset = () => {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    let k = localStorage.key(i);
+    if (k?.startsWith(P)) localStorage.removeItem(k);
+  }
+};

@@ -1,1 +1,38 @@
-import*as THREE from'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';export class Cam{constructor(c,s){this.c=c;this.s=s;this.t=new THREE.Vector3}update(v,dt){let d=+this.s.cameraDistance,h=+this.s.cameraHeight,f=new THREE.Vector3(Math.sin(v.yaw),0,Math.cos(v.yaw)),p=v.pos.clone().addScaledVector(f,-d);p.y+=h;this.c.position.lerp(p,1-Math.pow(.001,dt));this.t.copy(v.pos).addScaledVector(f,8);this.t.y+=1.2;this.c.lookAt(this.t)}}
+const P = 'apex-v2-';
+const d = {
+  settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true, showCheckpoints: true },
+  vehicle: { bodyColor: '#2f8cff', accentColor: '#ffffff', bodyStyle: 'apex', wheelStyle: 'sport' }
+};
+
+const r = (k, f) => {
+  try {
+    const x = localStorage.getItem(P + k);
+    return x == null ? f : JSON.parse(x);
+  } catch {
+    return f;
+  }
+};
+
+const w = (k, v) => localStorage.setItem(P + k, JSON.stringify(v));
+
+export const settings = () => ({ ...d.settings, ...r('settings', {}) });
+export const saveSettings = x => w('settings', x);
+export const vehicle = () => ({ ...d.vehicle, ...r('vehicle', {}) });
+export const saveVehicle = x => w('vehicle', x);
+export const scores = id => r('scores-' + id, []);
+
+export const score = (id, t) => {
+  let a = [...scores(id), { name: 'YOU', time: t }].sort((a, b) => a.time - b.time).slice(0, 20);
+  w('scores-' + id, a);
+  return a;
+};
+
+export const custom = () => r('custom', []);
+export const saveCustom = x => w('custom', x);
+
+export const reset = () => {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    let k = localStorage.key(i);
+    if (k?.startsWith(P)) localStorage.removeItem(k);
+  }
+};

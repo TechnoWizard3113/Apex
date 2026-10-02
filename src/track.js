@@ -1,4 +1,38 @@
-import*as THREE from'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
-const W=12,L=28,R=24,N=12;const mat=t=>new THREE.MeshStandardMaterial({color:t==='boost'?0x19a9ff:t==='ramp'?0x9075ff:t.startsWith('bank')?0x36b77b:0x46515e,roughness:.72});
-function seg(a,b,m){let d=new THREE.Vector3().subVectors(b,a),g=new THREE.BoxGeometry(W,.5,d.length()),x=new THREE.Mesh(g,m);x.position.copy(a).add(b).multiplyScalar(.5);x.rotation.y=Math.atan2(d.x,d.z);x.castShadow=x.receiveShadow=true;return x}
-export class Track{constructor(s){this.s=s;this.g=new THREE.Group;this.s.add(this.g);this.p=[];this.checkpoints=[];this.spawn=new THREE.Vector3(0,1,0);this.finish=this.spawn.clone()}clear(){this.g.clear();this.p=[];this.checkpoints=[]}add(t,rot=0){let prev=this.p.at(-1),start=prev?prev.end.clone():this.spawn.clone(),yaw=prev?prev.yaw:0;let end=start.clone(),ey=yaw+rot,m=mat(t);if(t==='curveLeft'||t==='curveRight'){let sg=t==='curveLeft'?1:-1,pts=[];for(let i=0;i<=N;i++){let a=i/N*Math.PI/2,q=new THREE.Vector3(sg*R*(1-Math.cos(a)),0,R*Math.sin(a));q.applyAxisAngle(new THREE.Vector3(0,1,0),yaw);q.add(start);pts.push(q)}for(let i=0;i<N;i++)this.g.add(seg(pts[i],pts[i+1],m));end.copy(pts.at(-1));ey=yaw+sg*Math.PI/2}else{let q=new THREE.Vector3(Math.sin(yaw),0,Math.cos(yaw));end.addScaledVector(q,L);if(t==='ramp')end.y+=9;let x=seg(start.clone().setY(start.y),end.clone().setY(start.y),m);if(t==='ramp'){x.rotation.order='YXZ';x.rotation.x=-Math.atan2(9,L)}if(t==='bankLeft')x.rotation.z=.38;if(t==='bankRight')x.rotation.z=-.38;this.g.add(x)}let p={type:t,start,yaw:ey,end,endYaw:ey};p.yaw=yaw+rot;this.p.push(p);this.finish=end.clone();if(this.p.length%3===0)this.checkpoints.push(end.clone());return p}build(a){this.clear();a.forEach(x=>this.add(typeof x==='string'?x:x.type,x.rotation||0));this.env()}env(){let f=new THREE.Mesh(new THREE.PlaneGeometry(1800,1800),new THREE.MeshStandardMaterial({color:0x17211a,roughness:1}));f.rotation.x=-Math.PI/2;f.receiveShadow=true;this.s.add(f);let sm=new THREE.Mesh(new THREE.BoxGeometry(W,.08,2),new THREE.MeshStandardMaterial({color:0xffffff}));sm.position.copy(this.spawn);sm.position.y+=.28;this.g.add(sm)}getSpawn(){return{position:this.spawn.clone(),yaw:this.p[0]?.yaw||0}}}
+const P = 'apex-v2-';
+const d = {
+  settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true, showCheckpoints: true },
+  vehicle: { bodyColor: '#2f8cff', accentColor: '#ffffff', bodyStyle: 'apex', wheelStyle: 'sport' }
+};
+
+const r = (k, f) => {
+  try {
+    const x = localStorage.getItem(P + k);
+    return x == null ? f : JSON.parse(x);
+  } catch {
+    return f;
+  }
+};
+
+const w = (k, v) => localStorage.setItem(P + k, JSON.stringify(v));
+
+export const settings = () => ({ ...d.settings, ...r('settings', {}) });
+export const saveSettings = x => w('settings', x);
+export const vehicle = () => ({ ...d.vehicle, ...r('vehicle', {}) });
+export const saveVehicle = x => w('vehicle', x);
+export const scores = id => r('scores-' + id, []);
+
+export const score = (id, t) => {
+  let a = [...scores(id), { name: 'YOU', time: t }].sort((a, b) => a.time - b.time).slice(0, 20);
+  w('scores-' + id, a);
+  return a;
+};
+
+export const custom = () => r('custom', []);
+export const saveCustom = x => w('custom', x);
+
+export const reset = () => {
+  for (let i = localStorage.length - 1; i >= 0; i--) {
+    let k = localStorage.key(i);
+    if (k?.startsWith(P)) localStorage.removeItem(k);
+  }
+};

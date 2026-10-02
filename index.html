@@ -1,11 +1,156 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Apex</title><link rel="stylesheet" href="./style.css"></head><body>
-<section id="menu" class="screen"><div class="panel hero"><div class="logo">APEX</div><div class="tag">BUILD. RACE. IMPROVE.</div><div class="menu"><button id="play">PLAY</button><button id="build">BUILD</button><button id="tracks">TRACKS</button><button id="vehicle">VEHICLE</button><button id="settings">SETTINGS</button></div></div></section>
-<section id="tracksScreen" class="screen hidden"><div class="panel wide"><header><div><small>TRACKS</small><h1>Choose a track</h1></div><button data-back="menu">BACK</button></header><div id="trackList" class="cards"></div></div></section>
-<section id="leaderScreen" class="screen hidden"><div class="panel"><header><div><small id="leaderName">TRACK</small><h1>Leaderboard</h1></div><button data-back="tracksScreen">BACK</button></header><div id="leaderRows"></div></div></section>
-<section id="builderScreen" class="screen hidden"><div class="panel wide"><header><div><small>TRACK BUILDER</small><h1>Build a track</h1></div><button data-back="menu">BACK</button></header><div class="builder"><div id="builderView"></div><aside><div id="pieces" class="piecegrid"><button data-piece="straight">STRAIGHT</button><button data-piece="curveLeft">LEFT CURVE</button><button data-piece="curveRight">RIGHT CURVE</button><button data-piece="ramp">RAMP</button><button data-piece="boost">BOOST</button><button data-piece="bankLeft">LEFT BANK</button><button data-piece="bankRight">RIGHT BANK</button></div><p id="buildStatus">Select a piece. Q/E rotate, Enter place.</p><button id="undo">UNDO</button><button id="clear">CLEAR</button><button id="test">TEST TRACK</button><button id="saveTrack">SAVE TRACK</button></aside></div></div></section>
-<section id="vehicleScreen" class="screen hidden"><div class="panel wide"><header><div><small>GARAGE</small><h1>Vehicle appearance</h1></div><button data-back="menu">BACK</button></header><div class="vehicleEdit"><div id="vehicleView"></div><div><label>BODY COLOR<input id="bodyColor" type="color"></label><label>ACCENT COLOR<input id="accentColor" type="color"></label><label>BODY STYLE<select id="bodyStyle"><option value="apex">APEX</option><option value="wide">WIDE</option><option value="arrow">ARROW</option></select></label><label>WHEELS<select id="wheelStyle"><option value="sport">SPORT</option><option value="classic">CLASSIC</option><option value="dark">DARK</option></select></label><button id="saveVehicle">SAVE</button></div></div></div></section>
-<section id="settingsScreen" class="screen hidden"><div class="panel"><header><div><small>SETTINGS</small><h1>Game settings</h1></div><button data-back="menu">BACK</button></header><label>GRAPHICS<select id="graphics"><option>high</option><option>medium</option><option>low</option></select></label><label>CAMERA DISTANCE<input id="camDistance" type="range" min="6" max="18"></label><label>CAMERA HEIGHT<input id="camHeight" type="range" min="2" max="10"></label><label class="check">SHOW SPEED<input id="showSpeed" type="checkbox"></label><label class="check">SHOW CHECKPOINTS<input id="showCheckpoints" type="checkbox"></label><button id="reset">RESET LOCAL DATA</button></div></section>
-<main id="game" class="hidden"><div id="gameView"></div><div class="hud"><div><small>TIME</small><b id="time">00:00.000</b></div><div><small>BEST</small><b id="best">--:--.---</b></div><div><small id="gameTrack">TRACK</small><b id="speed">0 KM/H</b></div></div><div id="countdown"></div><div id="finish" class="hidden"></div><div class="bottom"><span id="checkpoint">CHECKPOINT 0/0</span><button id="menu">MENU</button></div></main>
-<script type="module" src="./src/main.js"></script></body></html>
-/* 
-  Apex - A simple racing game with a track builder.
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Apex</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <section id="menu" class="screen">
+    <div class="panel hero">
+      <div class="logo">APEX</div>
+      <div class="tag">BUILD. RACE. IMPROVE.</div>
+      <div class="menu">
+        <button id="play">PLAY</button>
+        <button id="build">BUILD</button>
+        <button id="tracks">TRACKS</button>
+        <button id="vehicle">VEHICLE</button>
+        <button id="settings">SETTINGS</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="tracksScreen" class="screen hidden">
+    <div class="panel wide">
+      <header>
+        <div>
+          <small>TRACKS</small>
+          <h1>Choose a track</h1>
+        </div>
+        <button data-back="menu">BACK</button>
+      </header>
+      <div id="trackList" class="cards"></div>
+    </div>
+  </section>
+
+  <section id="leaderScreen" class="screen hidden">
+    <div class="panel">
+      <header>
+        <div>
+          <small id="leaderName">TRACK</small>
+          <h1>Leaderboard</h1>
+        </div>
+        <button data-back="tracksScreen">BACK</button>
+      </header>
+      <div id="leaderRows"></div>
+    </div>
+  </section>
+
+  <section id="builderScreen" class="screen hidden">
+    <div class="panel wide">
+      <header>
+        <div>
+          <small>TRACK BUILDER</small>
+          <h1>Build a track</h1>
+        </div>
+        <button data-back="menu">BACK</button>
+      </header>
+      <div class="builder">
+        <div id="builderView"></div>
+        <aside>
+          <div id="pieces" class="piecegrid">
+            <button data-piece="straight">STRAIGHT</button>
+            <button data-piece="curveLeft">LEFT CURVE</button>
+            <button data-piece="curveRight">RIGHT CURVE</button>
+            <button data-piece="ramp">RAMP</button>
+            <button data-piece="boost">BOOST</button>
+            <button data-piece="bankLeft">LEFT BANK</button>
+            <button data-piece="bankRight">RIGHT BANK</button>
+          </div>
+          <p id="buildStatus">Select a piece. Q/E rotate, Enter place.</p>
+          <button id="undo">UNDO</button>
+          <button id="clear">CLEAR</button>
+          <button id="test">TEST TRACK</button>
+          <button id="saveTrack">SAVE TRACK</button>
+        </aside>
+      </div>
+    </div>
+  </section>
+
+  <section id="vehicleScreen" class="screen hidden">
+    <div class="panel wide">
+      <header>
+        <div>
+          <small>GARAGE</small>
+          <h1>Vehicle appearance</h1>
+        </div>
+        <button data-back="menu">BACK</button>
+      </header>
+      <div class="vehicleEdit">
+        <div id="vehicleView"></div>
+        <div>
+          <label>BODY COLOR<input id="bodyColor" type="color"></label>
+          <label>ACCENT COLOR<input id="accentColor" type="color"></label>
+          <label>BODY STYLE
+            <select id="bodyStyle">
+              <option value="apex">APEX</option>
+              <option value="wide">WIDE</option>
+              <option value="arrow">ARROW</option>
+            </select>
+          </label>
+          <label>WHEELS
+            <select id="wheelStyle">
+              <option value="sport">SPORT</option>
+              <option value="classic">CLASSIC</option>
+              <option value="dark">DARK</option>
+            </select>
+          </label>
+          <button id="saveVehicle">SAVE</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="settingsScreen" class="screen hidden">
+    <div class="panel">
+      <header>
+        <div>
+          <small>SETTINGS</small>
+          <h1>Game settings</h1>
+        </div>
+        <button data-back="menu">BACK</button>
+      </header>
+      <label>GRAPHICS
+        <select id="graphics">
+          <option>high</option>
+          <option>medium</option>
+          <option>low</option>
+        </select>
+      </label>
+      <label>CAMERA DISTANCE<input id="camDistance" type="range" min="6" max="18"></label>
+      <label>CAMERA HEIGHT<input id="camHeight" type="range" min="2" max="10"></label>
+      <label class="check">SHOW SPEED<input id="showSpeed" type="checkbox"></label>
+      <label class="check">SHOW CHECKPOINTS<input id="showCheckpoints" type="checkbox"></label>
+      <button id="reset">RESET LOCAL DATA</button>
+    </div>
+  </section>
+
+  <main id="game" class="hidden">
+    <div id="gameView"></div>
+    <div class="hud">
+      <div><small>TIME</small><b id="time">00:00.000</b></div>
+      <div><small>BEST</small><b id="best">--:--.---</b></div>
+      <div><small id="gameTrack">TRACK</small><b id="speed">0 KM/H</b></div>
+    </div>
+    <div id="countdown"></div>
+    <div id="finish" class="hidden"></div>
+    <div class="bottom">
+      <span id="checkpoint">CHECKPOINT 0/0</span>
+      <button id="hudMenu">MENU</button>
+    </div>
+  </main>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
