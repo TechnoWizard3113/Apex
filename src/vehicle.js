@@ -1,261 +1,475 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js";
 
 export class Vehicle {
-    constructor(scene, track) {
-        this.track = track;
+    constructor(scene) {
+        this.scene = scene;
 
-        this.group = new THREE.Group();
-        scene.add(this.group);
+        this.group =
+            new THREE.Group();
 
-        this.velocity = new THREE.Vector3();
-        this.forwardSpeed = 0;
-        this.steering = 0;
-
-        this.maxSpeed = 62;
-        this.reverseSpeed = 14;
-        this.acceleration = 34;
-        this.brakeStrength = 48;
-        this.drag = 2.2;
-        this.grip = 9;
-        this.airControl = 2;
-        this.gravity = 30;
-
-        this.grounded = true;
-        this.verticalVelocity = 0;
-
-        this.spawnPosition = new THREE.Vector3();
-        this.spawnRotation = 0;
-
-        this.buildModel();
-        this.reset();
-    }
-
-    buildModel() {
-        const bodyMaterial = new THREE.MeshStandardMaterial({
-            color: 0xc83a3a,
-            roughness: 0.55,
-            metalness: 0.1
-        });
-
-        const darkMaterial = new THREE.MeshStandardMaterial({
-            color: 0x171a1e,
-            roughness: 0.35,
-            metalness: 0.25
-        });
-
-        const body = new THREE.Mesh(
-            new THREE.BoxGeometry(2.6, 0.65, 4.4),
-            bodyMaterial
-        );
-
-        body.position.y = 0.75;
-        body.castShadow = true;
-        this.group.add(body);
-
-        const cabin = new THREE.Mesh(
-            new THREE.BoxGeometry(2.05, 0.65, 1.9),
-            darkMaterial
-        );
-
-        cabin.position.set(0, 1.25, -0.15);
-        cabin.castShadow = true;
-        this.group.add(cabin);
-
-        const wheelGeometry = new THREE.CylinderGeometry(
-            0.48,
-            0.48,
-            0.38,
-            12
-        );
-
-        const wheelPositions = [
-            [-1.35, 0.48, 1.35],
-            [1.35, 0.48, 1.35],
-            [-1.35, 0.48, -1.35],
-            [1.35, 0.48, -1.35]
-        ];
-
-        for (const [x, y, z] of wheelPositions) {
-            const wheel = new THREE.Mesh(
-                wheelGeometry,
-                darkMaterial
+        this.position =
+            new THREE.Vector3(
+                0,
+                2,
+                0
             );
 
-            wheel.position.set(x, y, z);
-            wheel.rotation.z = Math.PI / 2;
+        this.velocity =
+            new THREE.Vector3();
+
+        this.yaw = 0;
+
+        this.speed = 0;
+
+        this.steering = 0;
+
+        this.maxSpeed = 72;
+        this.acceleration = 38;
+        this.brakePower = 62;
+        this.reverseAcceleration = 22;
+        this.drag = 2.2;
+        this.grip = 7.5;
+        this.gravity = 32;
+
+        this.grounded = true;
+        this.boostTimer = 0;
+
+        this.buildVehicle();
+
+        scene.add(
+            this.group
+        );
+    }
+
+    buildVehicle() {
+        const bodyMaterial =
+            new THREE.MeshStandardMaterial({
+                color: 0xd52f35,
+                roughness: 0.55,
+                metalness: 0.15
+            });
+
+        const darkMaterial =
+            new THREE.MeshStandardMaterial({
+                color: 0x15171a,
+                roughness: 0.65
+            });
+
+        const glassMaterial =
+            new THREE.MeshStandardMaterial({
+                color: 0x182936,
+                roughness: 0.2,
+                metalness: 0.25
+            });
+
+        const body =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    3.2,
+                    0.9,
+                    5.5
+                ),
+                bodyMaterial
+            );
+
+        body.position.y = 1.05;
+        body.castShadow = true;
+
+        this.group.add(body);
+
+        const cabin =
+            new THREE.Mesh(
+                new THREE.BoxGeometry(
+                    2.5,
+                    0.75,
+                    2.4
+                ),
+                glassMaterial
+            );
+
+        cabin.position.set(
+            0,
+            1.72,
+            -0.25
+        );
+
+        cabin.castShadow = true;
+
+        this.group.add(cabin);
+
+        const wheelGeometry =
+            new THREE.CylinderGeometry(
+                0.65,
+                0.65,
+                0.5,
+                12
+            );
+
+        const wheelPositions = [
+            [-1.55, 0.65, 1.8],
+            [1.55, 0.65, 1.8],
+            [-1.55, 0.65, -1.8],
+            [1.55, 0.65, -1.8]
+        ];
+
+        for (
+            const [x, y, z]
+            of wheelPositions
+        ) {
+            const wheel =
+                new THREE.Mesh(
+                    wheelGeometry,
+                    darkMaterial
+                );
+
+            wheel.rotation.z =
+                Math.PI / 2;
+
+            wheel.position.set(
+                x,
+                y,
+                z
+            );
+
             wheel.castShadow = true;
 
             this.group.add(wheel);
         }
     }
 
-    reset() {
-        const spawn = this.track.getSpawn();
+    reset(position, yaw) {
+        this.position.copy(position);
 
-        this.spawnPosition.copy(spawn.position);
-        this.spawnRotation = spawn.direction;
+        this.velocity.set(
+            0,
+            0,
+            0
+        );
 
-        this.group.position.copy(this.spawnPosition);
-        this.group.rotation.y = this.spawnRotation;
-
-        this.velocity.set(0, 0, 0);
-        this.forwardSpeed = 0;
-        this.verticalVelocity = 0;
+        this.speed = 0;
+        this.yaw = yaw;
+        this.steering = 0;
         this.grounded = true;
+        this.boostTimer = 0;
+
+        this.group.position.copy(
+            this.position
+        );
+
+        this.group.rotation.set(
+            0,
+            this.yaw,
+            0
+        );
     }
 
-    update(delta, controls) {
-        const forward = new THREE.Vector3(0, 0, 1)
-            .applyQuaternion(this.group.quaternion);
-
-        const right = new THREE.Vector3(1, 0, 0)
-            .applyQuaternion(this.group.quaternion);
-
-        const currentPiece =
-            this.track.getPieceAt(this.group.position);
-
-        const groundHeight =
-            this.track.getHeightAt(this.group.position);
-
-        if (groundHeight !== null) {
-            const targetHeight = groundHeight + 0.48;
-
-            if (
-                this.group.position.y <= targetHeight + 0.7 &&
-                this.verticalVelocity <= 0
-            ) {
-                this.group.position.y = targetHeight;
-                this.verticalVelocity = 0;
-                this.grounded = true;
-            } else {
-                this.grounded = false;
-            }
-        } else {
-            this.grounded = false;
-        }
-
-        const throttle =
-            controls.forward ? 1 : 0;
-
-        const brake =
-            controls.backward ? 1 : 0;
-
-        const steerInput =
-            (controls.left ? 1 : 0) -
-            (controls.right ? 1 : 0);
-
-        if (this.grounded) {
-            if (throttle) {
-                this.forwardSpeed +=
-                    this.acceleration * delta;
-            }
-
-            if (brake) {
-                if (this.forwardSpeed > 0) {
-                    this.forwardSpeed -=
-                        this.brakeStrength * delta;
-                } else {
-                    this.forwardSpeed -=
-                        this.acceleration * 0.55 * delta;
-                }
-            }
-
-            if (!throttle && !brake) {
-                const deceleration =
-                    this.drag * delta;
-
-                if (this.forwardSpeed > 0) {
-                    this.forwardSpeed = Math.max(
-                        0,
-                        this.forwardSpeed - deceleration
-                    );
-                } else {
-                    this.forwardSpeed = Math.min(
-                        0,
-                        this.forwardSpeed + deceleration
-                    );
-                }
-            }
-
-            this.forwardSpeed = THREE.MathUtils.clamp(
-                this.forwardSpeed,
-                -this.reverseSpeed,
-                this.maxSpeed
+    update(
+        delta,
+        controls,
+        track
+    ) {
+        const forward =
+            new THREE.Vector3(
+                Math.sin(this.yaw),
+                0,
+                Math.cos(this.yaw)
             );
 
-            const speedFactor = Math.min(
-                Math.abs(this.forwardSpeed) / 25,
+        const right =
+            new THREE.Vector3(
+                Math.cos(this.yaw),
+                0,
+                -Math.sin(this.yaw)
+            );
+
+        const forwardSpeed =
+            this.velocity.dot(
+                forward
+            );
+
+        const lateralSpeed =
+            this.velocity.dot(
+                right
+            );
+
+        const surface =
+            track.getSurfaceInfo(
+                this.position
+            );
+
+        if (
+            surface.boost &&
+            this.grounded
+        ) {
+            this.boostTimer = 0.35;
+        }
+
+        if (
+            this.boostTimer > 0
+        ) {
+            this.boostTimer -= delta;
+
+            this.velocity.addScaledVector(
+                forward,
+                32 * delta
+            );
+        }
+
+        if (
+            controls.throttle
+        ) {
+            if (
+                forwardSpeed < 0
+            ) {
+                this.velocity.addScaledVector(
+                    forward,
+                    this.brakePower *
+                    delta
+                );
+            } else {
+                this.velocity.addScaledVector(
+                    forward,
+                    this.acceleration *
+                    delta
+                );
+            }
+        }
+
+        if (
+            controls.brake
+        ) {
+            if (
+                forwardSpeed > 1
+            ) {
+                this.velocity.addScaledVector(
+                    forward,
+                    -this.brakePower *
+                    delta
+                );
+            } else {
+                this.velocity.addScaledVector(
+                    forward,
+                    -this.reverseAcceleration *
+                    delta
+                );
+            }
+        }
+
+        if (
+            !controls.throttle &&
+            !controls.brake
+        ) {
+            const drag =
+                Math.min(
+                    Math.abs(
+                        forwardSpeed
+                    ),
+                    this.drag *
+                    7 *
+                    delta
+                );
+
+            this.velocity.addScaledVector(
+                forward,
+                -Math.sign(
+                    forwardSpeed
+                ) *
+                drag
+            );
+        }
+
+        const steeringTarget =
+            (
+                controls.right
+                    ? 1
+                    : 0
+            ) -
+            (
+                controls.left
+                    ? 1
+                    : 0
+            );
+
+        this.steering =
+            THREE.MathUtils.lerp(
+                this.steering,
+                steeringTarget,
+                Math.min(
+                    delta * 9,
+                    1
+                )
+            );
+
+        const steeringFactor =
+            THREE.MathUtils.clamp(
+                Math.abs(
+                    forwardSpeed
+                ) / 12,
+                0,
                 1
             );
 
-            const steeringStrength =
-                1.65 * speedFactor;
+        const direction =
+            forwardSpeed >= 0
+                ? 1
+                : -1;
 
-            this.steering = THREE.MathUtils.lerp(
-                this.steering,
-                steerInput,
-                8 * delta
-            );
+        this.yaw +=
+            this.steering *
+            steeringFactor *
+            2.35 *
+            delta *
+            direction;
 
-            this.group.rotation.y +=
-                this.steering *
-                steeringStrength *
-                delta *
-                Math.sign(
-                    this.forwardSpeed || 1
-                );
+        const grip =
+            this.grounded
+                ? this.grip
+                : this.grip * 0.18;
 
-            const lateralVelocity =
-                this.velocity.dot(right);
-
-            this.velocity.addScaledVector(
-                right,
-                -lateralVelocity * this.grip * delta
-            );
-        } else {
-            this.group.rotation.y +=
-                steerInput *
-                this.airControl *
-                delta;
-        }
-
-        const velocityDirection = new THREE.Vector3(0, 0, 1)
-            .applyQuaternion(this.group.quaternion);
-
-        this.velocity.copy(
-            velocityDirection.multiplyScalar(this.forwardSpeed)
+        this.velocity.addScaledVector(
+            right,
+            -lateralSpeed *
+            Math.min(
+                grip * delta,
+                1
+            )
         );
 
         if (!this.grounded) {
-            this.verticalVelocity -=
-                this.gravity * delta;
-
-            this.group.position.y +=
-                this.verticalVelocity * delta;
+            this.velocity.y -=
+                this.gravity *
+                delta;
         }
 
-        this.group.position.addScaledVector(
+        const horizontal =
+            new THREE.Vector3(
+                this.velocity.x,
+                0,
+                this.velocity.z
+            );
+
+        const horizontalSpeed =
+            horizontal.length();
+
+        const currentMax =
+            this.boostTimer > 0
+                ? 105
+                : this.maxSpeed;
+
+        if (
+            horizontalSpeed >
+            currentMax
+        ) {
+            horizontal
+                .normalize()
+                .multiplyScalar(
+                    currentMax
+                );
+
+            this.velocity.x =
+                horizontal.x;
+
+            this.velocity.z =
+                horizontal.z;
+        }
+
+        this.position.addScaledVector(
             this.velocity,
             delta
         );
 
-        if (
-            this.group.position.y < -25
-        ) {
-            this.reset();
-        }
+        this.applySurface(
+            track,
+            surface
+        );
 
-        if (currentPiece?.type === "boost") {
-            this.forwardSpeed = Math.min(
-                this.forwardSpeed + 18 * delta,
-                this.maxSpeed
+        this.speed =
+            new THREE.Vector3(
+                this.velocity.x,
+                0,
+                this.velocity.z
+            ).length();
+
+        this.group.position.copy(
+            this.position
+        );
+
+        this.group.rotation.order =
+            "YXZ";
+
+        this.group.rotation.y =
+            this.yaw;
+
+        const visualSpeed =
+            THREE.MathUtils.clamp(
+                this.speed /
+                this.maxSpeed,
+                0,
+                1
             );
+
+        this.group.rotation.z =
+            -this.steering *
+            visualSpeed *
+            0.08;
+
+        if (
+            this.grounded
+        ) {
+            this.group.rotation.x =
+                -surface.pitch;
         }
     }
 
-    getSpeedKmh() {
-        return Math.round(
-            Math.abs(this.forwardSpeed) * 3.6
-        );
+    applySurface(
+        track,
+        previousSurface
+    ) {
+        const surface =
+            track.getSurfaceInfo(
+                this.position
+            );
+
+        const groundHeight =
+            surface.height + 1.2;
+
+        if (
+            this.position.y <=
+            groundHeight + 0.35
+        ) {
+            this.position.y =
+                groundHeight;
+
+            if (
+                this.velocity.y < 0
+            ) {
+                this.velocity.y = 0;
+            }
+
+            this.grounded = true;
+        } else {
+            this.grounded = false;
+        }
+
+        if (
+            previousSurface &&
+            previousSurface.height <
+            surface.height - 4
+        ) {
+            this.grounded = false;
+        }
+
+        if (
+            this.position.y <
+            -40
+        ) {
+            const spawn =
+                track.getSpawn();
+
+            this.reset(
+                spawn.position,
+                spawn.yaw
+            );
+        }
     }
 }

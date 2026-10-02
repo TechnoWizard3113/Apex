@@ -6,13 +6,12 @@ import { FollowCamera } from "./camera.js";
 const menu = document.getElementById("menu");
 const trackSelect = document.getElementById("trackSelect");
 const builder = document.getElementById("builder");
+const game = document.getElementById("game");
 
 const playButton = document.getElementById("playButton");
 const buildButton = document.getElementById("buildButton");
 const tracksButton = document.getElementById("tracksButton");
-
-const trackBackButton =
-    document.getElementById("trackBackButton");
+const trackBackButton = document.getElementById("trackBackButton");
 
 const testTrackButton =
     document.getElementById("testTrackButton");
@@ -26,11 +25,8 @@ const builderBackButton =
 const builderStatus =
     document.getElementById("builderStatus");
 
-const game =
-    document.getElementById("game");
-
-const hud =
-    document.getElementById("hud");
+const pauseButton =
+    document.getElementById("pauseButton");
 
 const timerElement =
     document.getElementById("timer");
@@ -38,83 +34,14 @@ const timerElement =
 const bestTimeElement =
     document.getElementById("bestTime");
 
-const countdownElement =
-    document.getElementById("countdown");
-
 const speedElement =
     document.getElementById("speed");
 
 const checkpointElement =
     document.getElementById("checkpoint");
 
-const pauseButton =
-    document.getElementById("pauseButton");
-
-const TRACKS = {
-    1: {
-        id: 1,
-        name: "Mountain Run"
-    },
-
-    2: {
-        id: 2,
-        name: "Speed Circuit"
-    }
-};
-
-const LEADERBOARD_KEY =
-    "apex-leaderboards";
-
-let currentTrackId = 1;
-let currentScreen = "menu";
-
-let selectedPieceType = null;
-let previewPiece = null;
-
-let raceActive = false;
-let countdownActive = false;
-let raceFinished = false;
-
-let raceStartTime = 0;
-let elapsedTime = 0;
-
-let lastFrameTime =
-    performance.now();
-
-const keys = {
-    forward: false,
-    backward: false,
-    left: false,
-    right: false
-};
-
-const scene =
-    new THREE.Scene();
-
-scene.background =
-    new THREE.Color(0x101418);
-
-scene.fog =
-    new THREE.Fog(
-        0x101418,
-        180,
-        900
-    );
-
-const camera =
-    new THREE.PerspectiveCamera(
-        70,
-        window.innerWidth /
-            window.innerHeight,
-        0.1,
-        2000
-    );
-
-camera.position.set(
-    0,
-    12,
-    -20
-);
+const countdownElement =
+    document.getElementById("countdown");
 
 const renderer =
     new THREE.WebGLRenderer({
@@ -122,10 +49,7 @@ const renderer =
     });
 
 renderer.setPixelRatio(
-    Math.min(
-        window.devicePixelRatio,
-        2
-    )
+    Math.min(window.devicePixelRatio, 2)
 );
 
 renderer.setSize(
@@ -135,75 +59,60 @@ renderer.setSize(
 
 renderer.shadowMap.enabled = true;
 
-renderer.shadowMap.type =
-    THREE.PCFSoftShadowMap;
+renderer.domElement.style.position = "absolute";
+renderer.domElement.style.inset = "0";
+renderer.domElement.style.pointerEvents = "none";
 
-renderer.domElement.style.position =
-    "absolute";
+game.appendChild(renderer.domElement);
 
-renderer.domElement.style.left =
-    "0";
+const scene =
+    new THREE.Scene();
 
-renderer.domElement.style.top =
-    "0";
+scene.background =
+    new THREE.Color(0x10151c);
 
-renderer.domElement.style.width =
-    "100%";
+const camera =
+    new THREE.PerspectiveCamera(
+        68,
+        window.innerWidth /
+            window.innerHeight,
+        0.1,
+        5000
+    );
 
-renderer.domElement.style.height =
-    "100%";
-
-renderer.domElement.style.zIndex =
-    "0";
-
-renderer.domElement.style.pointerEvents =
-    "none";
-
-game.insertBefore(
-    renderer.domElement,
-    game.firstChild
+camera.position.set(
+    0,
+    10,
+    -20
 );
 
 const ambientLight =
     new THREE.HemisphereLight(
-        0xbfd7ff,
-        0x1b211e,
-        1.8
+        0xffffff,
+        0x243020,
+        1.6
     );
 
-scene.add(ambientLight);
+scene.add(
+    ambientLight
+);
 
 const sun =
     new THREE.DirectionalLight(
         0xffffff,
-        2.4
+        2.2
     );
 
 sun.position.set(
     100,
-    180,
+    150,
     80
 );
 
 sun.castShadow = true;
 
-sun.shadow.mapSize.width =
-    2048;
-
-sun.shadow.mapSize.height =
-    2048;
-
-sun.shadow.camera.left =
-    -300;
-
-sun.shadow.camera.right =
-    300;
-
-sun.shadow.camera.top =
-    300;
-
-sun.shadow.camera.bottom =
-    -300;
+sun.shadow.mapSize.width = 2048;
+sun.shadow.mapSize.height = 2048;
 
 scene.add(sun);
 
@@ -216,242 +125,133 @@ const vehicle =
 const followCamera =
     new FollowCamera(camera);
 
-function loadLeaderboards() {
-    try {
-        const stored =
-            localStorage.getItem(
-                LEADERBOARD_KEY
-            );
+const controls = {
+    throttle: false,
+    brake: false,
+    left: false,
+    right: false
+};
 
-        if (!stored) {
-            return {};
-        }
+let currentMode = "menu";
 
-        const parsed =
-            JSON.parse(stored);
+let currentTrackId = 1;
 
-        if (
-            typeof parsed !== "object" ||
-            parsed === null
-        ) {
-            return {};
-        }
+let raceStarted = false;
+let raceFinished = false;
+let raceStartTime = 0;
+let finalRaceTime = 0;
 
-        return parsed;
-    } catch {
-        return {};
-    }
-}
-
-function saveLeaderboards(data) {
-    localStorage.setItem(
-        LEADERBOARD_KEY,
-        JSON.stringify(data)
-    );
-}
-
-function getTrackLeaderboard(trackId) {
-    const data =
-        loadLeaderboards();
-
-    const entries =
-        data[String(trackId)];
-
-    if (!Array.isArray(entries)) {
-        return [];
-    }
-
-    return entries
-        .filter(
-            (entry) =>
-                entry &&
-                typeof entry.time ===
-                    "number"
+let bestTime =
+    Number(
+        localStorage.getItem(
+            "apex-best-track-" +
+            currentTrackId
         )
-        .sort(
-            (a, b) =>
-                a.time - b.time
-        );
-}
+    ) || null;
 
-function getPersonalBest(trackId) {
-    const entries =
-        getTrackLeaderboard(
-            trackId
-        );
+let checkpoint = 1;
 
-    if (entries.length === 0) {
-        return null;
+let builderPieceType = null;
+let builderPreview = null;
+let builderPreviewRotation = 0;
+
+let builderHistory = [];
+
+let lastFrameTime =
+    performance.now();
+
+function showScreen(screen) {
+    menu.classList.add("hidden");
+    trackSelect.classList.add("hidden");
+    builder.classList.add("hidden");
+    game.classList.remove("active");
+
+    if (screen === menu) {
+        menu.classList.remove("hidden");
     }
 
-    return entries[0].time;
-}
-
-function recordTime(
-    trackId,
-    time
-) {
-    if (trackId === 0) {
-        return;
+    if (screen === trackSelect) {
+        trackSelect.classList.remove("hidden");
     }
 
-    const data =
-        loadLeaderboards();
-
-    const key =
-        String(trackId);
-
-    if (!Array.isArray(data[key])) {
-        data[key] = [];
+    if (screen === builder) {
+        builder.classList.remove("hidden");
     }
 
-    data[key].push({
-        time,
-        date:
-            new Date().toISOString()
-    });
-
-    data[key].sort(
-        (a, b) =>
-            a.time - b.time
-    );
-
-    data[key] =
-        data[key].slice(0, 100);
-
-    saveLeaderboards(data);
+    if (screen === game) {
+        game.classList.add("active");
+    }
 }
 
 function formatTime(milliseconds) {
     if (
-        !Number.isFinite(
-            milliseconds
-        )
+        !Number.isFinite(milliseconds)
     ) {
         return "--:--.---";
     }
 
-    const total =
-        Math.floor(milliseconds);
+    const totalMilliseconds =
+        Math.max(
+            0,
+            Math.floor(milliseconds)
+        );
 
     const minutes =
         Math.floor(
-            total / 60000
+            totalMilliseconds / 60000
         );
 
     const seconds =
         Math.floor(
-            (total % 60000) / 1000
+            (
+                totalMilliseconds %
+                60000
+            ) / 1000
         );
 
     const millis =
-        total % 1000;
+        totalMilliseconds %
+        1000;
 
     return (
-        String(minutes).padStart(
-            2,
-            "0"
-        ) +
+        String(minutes).padStart(2, "0") +
         ":" +
-        String(seconds).padStart(
-            2,
-            "0"
-        ) +
+        String(seconds).padStart(2, "0") +
         "." +
-        String(millis).padStart(
-            3,
-            "0"
-        )
+        String(millis).padStart(3, "0")
     );
 }
 
-function updateBestTime() {
-    const best =
-        getPersonalBest(
-            currentTrackId
-        );
-
+function updateBestDisplay() {
     bestTimeElement.textContent =
-        best === null
+        bestTime === null
             ? "--:--.---"
-            : formatTime(best);
+            : formatTime(bestTime);
 }
 
-function hideScreens() {
-    menu.classList.add("hidden");
-    trackSelect.classList.add("hidden");
-    builder.classList.add("hidden");
+function loadTrack(id) {
+    currentTrackId = id;
 
-    hud.classList.add("hidden");
-    pauseButton.classList.add("hidden");
-}
-
-function showMenu() {
-    raceActive = false;
-    countdownActive = false;
-
-    hideScreens();
-
-    menu.classList.remove("hidden");
-
-    currentScreen = "menu";
-}
-
-function showTrackSelect() {
-    raceActive = false;
-    countdownActive = false;
-
-    hideScreens();
-
-    trackSelect.classList.remove(
-        "hidden"
-    );
-
-    currentScreen =
-        "trackSelect";
-}
-
-function showBuilder() {
-    raceActive = false;
-    countdownActive = false;
-
-    hideScreens();
-
-    builder.classList.remove(
-        "hidden"
-    );
-
-    currentScreen =
-        "builder";
-
-    track.clear();
-
-    selectedPieceType = null;
-
-    removePreview();
-
-    builderStatus.textContent =
-        "Select a piece.";
-}
-
-function loadTrack(trackId) {
-    currentTrackId =
-        Number(trackId);
-
-    if (currentTrackId === 1) {
+    if (id === 1) {
         track.buildDefault();
-    }
-
-    if (currentTrackId === 2) {
+    } else {
         track.buildSpeedCircuit();
     }
 
-    removePreview();
+    bestTime =
+        Number(
+            localStorage.getItem(
+                "apex-best-track-" +
+                currentTrackId
+            )
+        ) || null;
 
-    updateBestTime();
+    updateBestDisplay();
+
+    resetRace();
 }
 
-function resetVehicle() {
+function resetRace() {
     const spawn =
         track.getSpawn();
 
@@ -459,144 +259,112 @@ function resetVehicle() {
         spawn.position,
         spawn.yaw
     );
-}
 
-function startRace() {
-    if (
-        track.pieces.length === 0
-    ) {
-        return;
-    }
+    followCamera.reset();
 
-    hideScreens();
-
-    hud.classList.remove(
-        "hidden"
-    );
-
-    pauseButton.classList.remove(
-        "hidden"
-    );
-
-    currentScreen =
-        "game";
-
-    resetVehicle();
-
+    raceStarted = false;
     raceFinished = false;
-    raceActive = false;
-    countdownActive = true;
-
-    elapsedTime = 0;
+    raceStartTime = 0;
+    finalRaceTime = 0;
+    checkpoint = 1;
 
     timerElement.textContent =
         "00:00.000";
 
-    updateBestTime();
+    speedElement.textContent =
+        "0 KM/H";
+
+    checkpointElement.textContent =
+        "CHECKPOINT 1";
 
     countdownElement.textContent =
-        "3";
+        "";
+}
 
-    let count = 3;
+function startRace() {
+    resetRace();
+
+    currentMode = "race";
+
+    showScreen(game);
+
+    runCountdown();
+}
+
+function runCountdown() {
+    raceStarted = false;
+
+    const values = [
+        "3",
+        "2",
+        "1",
+        "GO"
+    ];
+
+    let index = 0;
+
+    countdownElement.textContent =
+        values[index];
 
     const interval =
         setInterval(() => {
-            count -= 1;
+            index += 1;
 
-            if (count > 0) {
+            if (
+                index >= values.length
+            ) {
+                clearInterval(interval);
+
                 countdownElement.textContent =
-                    String(count);
+                    "";
+
+                raceStarted = true;
+                raceStartTime =
+                    performance.now();
 
                 return;
             }
 
             countdownElement.textContent =
-                "GO";
-
-            raceStartTime =
-                performance.now();
-
-            raceActive = true;
-            countdownActive = false;
-
-            clearInterval(interval);
-
-            setTimeout(() => {
-                countdownElement.textContent =
-                    "";
-            }, 700);
-        }, 800);
+                values[index];
+        }, 750);
 }
 
 function finishRace() {
     if (
         raceFinished ||
-        !raceActive
+        !raceStarted
     ) {
         return;
     }
 
     raceFinished = true;
-    raceActive = false;
 
-    elapsedTime =
+    finalRaceTime =
         performance.now() -
         raceStartTime;
 
     timerElement.textContent =
-        formatTime(elapsedTime);
+        formatTime(finalRaceTime);
 
-    recordTime(
-        currentTrackId,
-        elapsedTime
-    );
+    if (
+        bestTime === null ||
+        finalRaceTime < bestTime
+    ) {
+        bestTime =
+            finalRaceTime;
 
-    updateBestTime();
-
-    countdownElement.textContent =
-        "FINISH";
-
-    setTimeout(() => {
-        countdownElement.textContent =
-            "";
-    }, 1500);
-}
-
-function updateRace(delta) {
-    if (!raceActive) {
-        return;
-    }
-
-    elapsedTime =
-        performance.now() -
-        raceStartTime;
-
-    timerElement.textContent =
-        formatTime(elapsedTime);
-
-    vehicle.update(
-        delta,
-        {
-            throttle: keys.forward,
-            brake: keys.backward,
-            left: keys.left,
-            right: keys.right
-        },
-        track
-    );
-
-    const speed =
-        Math.abs(
-            vehicle.speed || 0
+        localStorage.setItem(
+            "apex-best-track-" +
+            currentTrackId,
+            String(bestTime)
         );
 
-    speedElement.textContent =
-        `${Math.round(
-            speed * 3.6
-        )} KM/H`;
+        updateBestDisplay();
+    }
+}
 
-    updateCheckpoint();
-
+function checkFinish() {
     const finish =
         track.getFinish();
 
@@ -605,146 +373,311 @@ function updateRace(delta) {
             finish
         );
 
-    if (distance < 9) {
+    if (
+        distance < 10
+    ) {
         finishRace();
     }
 }
 
-function updateCheckpoint() {
+function updateRace(delta) {
+    vehicle.update(
+        delta,
+        controls,
+        track
+    );
+
     if (
-        track.pieces.length === 0
+        raceStarted &&
+        !raceFinished
+    ) {
+        const elapsed =
+            performance.now() -
+            raceStartTime;
+
+        timerElement.textContent =
+            formatTime(elapsed);
+
+        checkFinish();
+    }
+
+    speedElement.textContent =
+        Math.round(
+            vehicle.speed * 3.6
+        ) +
+        " KM/H";
+}
+
+function removePreview() {
+    if (
+        builderPreview
+    ) {
+        scene.remove(
+            builderPreview.group
+        );
+
+        builderPreview = null;
+    }
+
+    builderPieceType = null;
+    builderPreviewRotation = 0;
+}
+
+function setPreviewOpacity(
+    valid
+) {
+    if (
+        !builderPreview
     ) {
         return;
     }
 
-    let closestIndex = 0;
-    let closestDistance =
-        Infinity;
+    builderPreview.group.traverse(
+        (object) => {
+            if (
+                !object.isMesh
+            ) {
+                return;
+            }
+
+            object.material =
+                object.material.clone();
+
+            object.material.transparent =
+                true;
+
+            object.material.opacity =
+                valid
+                    ? 0.45
+                    : 0.22;
+
+            object.material.depthWrite =
+                false;
+
+            if (
+                object.material.color
+            ) {
+                object.material.color.set(
+                    valid
+                        ? 0x35c77a
+                        : 0xd83232
+                );
+            }
+        }
+    );
+}
+
+function createBuilderPreview(
+    type
+) {
+    removePreview();
+
+    builderPieceType = type;
+
+    builderPreviewRotation = 0;
+
+    builderPreview =
+        track.createPreview(
+            type
+        );
+
+    scene.add(
+        builderPreview.group
+    );
+
+    updateBuilderPreview();
+
+    builderStatus.textContent =
+        "Q/E rotate. ENTER place. ESC cancel.";
+}
+
+function updateBuilderPreview() {
+    if (
+        !builderPreview
+    ) {
+        return;
+    }
+
+    const connector =
+        track.getCurrentConnector();
+
+    const original =
+        builderPreview;
+
+    const oldGroup =
+        original.group;
+
+    scene.remove(
+        oldGroup
+    );
+
+    const newPreview =
+        track.createPreview(
+            builderPieceType
+        );
+
+    const yaw =
+        connector.yaw +
+        builderPreviewRotation;
+
+    newPreview.start.yaw =
+        yaw;
+
+    newPreview.end.yaw =
+        yaw;
+
+    newPreview.group.rotation.y =
+        builderPreviewRotation;
+
+    scene.add(
+        newPreview.group
+    );
+
+    builderPreview =
+        newPreview;
+
+    const valid =
+        isPreviewValid(
+            builderPreview
+        );
+
+    setPreviewOpacity(
+        valid
+    );
+}
+
+function isPreviewValid(
+    preview
+) {
+    if (
+        !preview
+    ) {
+        return false;
+    }
+
+    const testPiece =
+        preview;
 
     for (
-        let i = 0;
-        i < track.pieces.length;
-        i += 1
+        const existing
+        of track.pieces
     ) {
-        const piece =
-            track.pieces[i];
+        const a =
+            track.pieceBounds(
+                existing
+            );
+
+        const b =
+            track.pieceBounds(
+                testPiece
+            );
 
         const distance =
-            piece.start.position.distanceTo(
-                vehicle.position
+            a.center.distanceTo(
+                b.center
             );
 
         if (
             distance <
-            closestDistance
+            a.radius +
+            b.radius -
+            8
         ) {
-            closestDistance =
-                distance;
-
-            closestIndex =
-                i;
+            return false;
         }
     }
 
-    checkpointElement.textContent =
-        `CHECKPOINT ${
-            closestIndex + 1
-        }/${track.pieces.length}`;
+    return true;
 }
 
-function selectBuilderPiece(type) {
-    selectedPieceType = type;
-
-    addSelectedPiece();
-}
-
-function addSelectedPiece() {
-    if (!selectedPieceType) {
+function placeBuilderPiece() {
+    if (
+        !builderPreview ||
+        !builderPieceType
+    ) {
         return;
     }
 
-    removePreview();
+    if (
+        !isPreviewValid(
+            builderPreview
+        )
+    ) {
+        builderStatus.textContent =
+            "Invalid placement.";
+
+        return;
+    }
 
     const piece =
         track.addPiece(
-            selectedPieceType
+            builderPieceType
         );
 
-    if (!piece) {
+    if (
+        !piece
+    ) {
         builderStatus.textContent =
-            "PIECE WOULD OVERLAP ANOTHER PIECE.";
-
-        createPreview();
+            "Invalid placement.";
 
         return;
+    }
+
+    builderHistory.push(
+        piece
+    );
+
+    builderStatus.textContent =
+        "Piece placed.";
+
+    createBuilderPreview(
+        builderPieceType
+    );
+}
+
+function undoBuilderPiece() {
+    if (
+        builderHistory.length === 0
+    ) {
+        builderStatus.textContent =
+            "Nothing to undo.";
+
+        return;
+    }
+
+    const piece =
+        builderHistory.pop();
+
+    const index =
+        track.pieces.indexOf(
+            piece
+        );
+
+    if (
+        index !== -1
+    ) {
+        track.pieces.splice(
+            index,
+            1
+        );
+
+        track.group.remove(
+            piece.group
+        );
+    }
+
+    track.updateMarkers();
+
+    if (
+        builderPieceType
+    ) {
+        createBuilderPreview(
+            builderPieceType
+        );
     }
 
     builderStatus.textContent =
-        `${selectedPieceType.toUpperCase()} ADDED`;
-
-    createPreview();
-}
-
-function createPreview() {
-    removePreview();
-
-    if (!selectedPieceType) {
-        return;
-    }
-
-    previewPiece =
-        track.createPreview(
-            selectedPieceType
-        );
-
-    if (!previewPiece) {
-        return;
-    }
-
-    track.group.add(
-        previewPiece.mesh
-    );
-}
-
-function removePreview() {
-    if (!previewPiece) {
-        return;
-    }
-
-    track.group.remove(
-        previewPiece.mesh
-    );
-
-    previewPiece.mesh.traverse(
-        (object) => {
-            if (
-                object.isMesh &&
-                object.geometry
-            ) {
-                object.geometry.dispose();
-            }
-
-            if (
-                object.isMesh &&
-                object.material
-            ) {
-                if (
-                    Array.isArray(
-                        object.material
-                    )
-                ) {
-                    object.material.forEach(
-                        (material) =>
-                            material.dispose()
-                    );
-                } else {
-                    object.material.dispose();
-                }
-            }
-        }
-    );
-
-    previewPiece = null;
+        "Last piece removed.";
 }
 
 function clearBuilder() {
@@ -752,44 +685,117 @@ function clearBuilder() {
 
     track.clear();
 
-    selectedPieceType = null;
+    builderHistory = [];
 
     builderStatus.textContent =
         "Track cleared. Select a piece.";
 }
 
+function enterBuilder() {
+    currentMode = "builder";
+
+    showScreen(builder);
+
+    clearBuilder();
+}
+
+function testBuilderTrack() {
+    removePreview();
+
+    currentMode = "race";
+
+    showScreen(game);
+
+    resetRace();
+
+    runCountdown();
+}
+
+function returnToMenu() {
+    removePreview();
+
+    currentMode = "menu";
+
+    showScreen(menu);
+}
+
 playButton.addEventListener(
     "click",
     () => {
-        showTrackSelect();
+        loadTrack(1);
+        startRace();
     }
 );
 
 buildButton.addEventListener(
     "click",
     () => {
-        showBuilder();
+        enterBuilder();
     }
 );
 
 tracksButton.addEventListener(
     "click",
     () => {
-        showTrackSelect();
+        currentMode = "trackSelect";
+        showScreen(trackSelect);
     }
 );
 
 trackBackButton.addEventListener(
     "click",
     () => {
-        showMenu();
+        currentMode = "menu";
+        showScreen(menu);
     }
 );
 
-builderBackButton.addEventListener(
+document
+    .querySelectorAll(
+        ".track-option"
+    )
+    .forEach(
+        (button) => {
+            button.addEventListener(
+                "click",
+                () => {
+                    const id =
+                        Number(
+                            button.dataset.trackId
+                        );
+
+                    loadTrack(id);
+
+                    startRace();
+                }
+            );
+        }
+    );
+
+document
+    .querySelectorAll(
+        ".piece-buttons button"
+    )
+    .forEach(
+        (button) => {
+            button.addEventListener(
+                "click",
+                () => {
+                    const type =
+                        button.dataset.piece;
+
+                    createBuilderPreview(
+                        type
+                    );
+                }
+            );
+        }
+    );
+
+testTrackButton.addEventListener(
     "click",
     () => {
-        showMenu();
+        testBuilderTrack();
     }
 );
 
@@ -800,106 +806,128 @@ clearTrackButton.addEventListener(
     }
 );
 
-testTrackButton.addEventListener(
+builderBackButton.addEventListener(
     "click",
     () => {
-        if (
-            track.pieces.length === 0
-        ) {
-            builderStatus.textContent =
-                "Add at least one piece first.";
-
-            return;
-        }
-
-        currentTrackId = 0;
-
-        startRace();
+        returnToMenu();
     }
 );
 
 pauseButton.addEventListener(
     "click",
     () => {
-        showMenu();
+        returnToMenu();
     }
 );
-
-document
-    .querySelectorAll(
-        ".track-option"
-    )
-    .forEach((button) => {
-        button.addEventListener(
-            "click",
-            () => {
-                const id =
-                    Number(
-                        button.dataset.trackId
-                    );
-
-                if (
-                    !TRACKS[id]
-                ) {
-                    return;
-                }
-
-                loadTrack(id);
-                startRace();
-            }
-        );
-    });
-
-document
-    .querySelectorAll(
-        ".piece-buttons button"
-    )
-    .forEach((button) => {
-        button.addEventListener(
-            "click",
-            () => {
-                selectBuilderPiece(
-                    button.dataset.piece
-                );
-            }
-        );
-    });
 
 window.addEventListener(
     "keydown",
     (event) => {
+        const key =
+            event.key.toLowerCase();
+
         if (
-            event.code === "ArrowUp" ||
-            event.code === "KeyW"
+            currentMode === "builder"
         ) {
-            keys.forward = true;
+            if (
+                key === "q"
+            ) {
+                event.preventDefault();
+
+                builderPreviewRotation -=
+                    Math.PI / 12;
+
+                updateBuilderPreview();
+
+                return;
+            }
+
+            if (
+                key === "e"
+            ) {
+                event.preventDefault();
+
+                builderPreviewRotation +=
+                    Math.PI / 12;
+
+                updateBuilderPreview();
+
+                return;
+            }
+
+            if (
+                event.key === "Enter"
+            ) {
+                event.preventDefault();
+
+                placeBuilderPiece();
+
+                return;
+            }
+
+            if (
+                key === "z"
+            ) {
+                event.preventDefault();
+
+                undoBuilderPiece();
+
+                return;
+            }
+
+            if (
+                key === "x"
+            ) {
+                event.preventDefault();
+
+                removePreview();
+
+                builderStatus.textContent =
+                    "Preview deleted.";
+
+                return;
+            }
+
+            if (
+                event.key === "Escape"
+            ) {
+                event.preventDefault();
+
+                removePreview();
+
+                builderStatus.textContent =
+                    "Preview cancelled.";
+
+                return;
+            }
         }
 
         if (
-            event.code === "ArrowDown" ||
-            event.code === "KeyS"
+            event.key === "ArrowUp" ||
+            key === "w"
         ) {
-            keys.backward = true;
+            controls.throttle = true;
         }
 
         if (
-            event.code === "ArrowLeft" ||
-            event.code === "KeyA"
+            event.key === "ArrowDown" ||
+            key === "s"
         ) {
-            keys.left = true;
+            controls.brake = true;
         }
 
         if (
-            event.code === "ArrowRight" ||
-            event.code === "KeyD"
+            event.key === "ArrowLeft" ||
+            key === "a"
         ) {
-            keys.right = true;
+            controls.left = true;
         }
 
         if (
-            event.code === "Escape"
+            event.key === "ArrowRight" ||
+            key === "d"
         ) {
-            showMenu();
+            controls.right = true;
         }
     }
 );
@@ -907,32 +935,35 @@ window.addEventListener(
 window.addEventListener(
     "keyup",
     (event) => {
+        const key =
+            event.key.toLowerCase();
+
         if (
-            event.code === "ArrowUp" ||
-            event.code === "KeyW"
+            event.key === "ArrowUp" ||
+            key === "w"
         ) {
-            keys.forward = false;
+            controls.throttle = false;
         }
 
         if (
-            event.code === "ArrowDown" ||
-            event.code === "KeyS"
+            event.key === "ArrowDown" ||
+            key === "s"
         ) {
-            keys.backward = false;
+            controls.brake = false;
         }
 
         if (
-            event.code === "ArrowLeft" ||
-            event.code === "KeyA"
+            event.key === "ArrowLeft" ||
+            key === "a"
         ) {
-            keys.left = false;
+            controls.left = false;
         }
 
         if (
-            event.code === "ArrowRight" ||
-            event.code === "KeyD"
+            event.key === "ArrowRight" ||
+            key === "d"
         ) {
-            keys.right = false;
+            controls.right = false;
         }
     }
 );
@@ -953,111 +984,32 @@ window.addEventListener(
     }
 );
 
-function clampCameraHeight() {
-    const trackHeight =
-        track.getHeightAt(
-            camera.position
-        );
-
-    if (
-        Number.isFinite(
-            trackHeight
-        )
-    ) {
-        const minimumHeight =
-            trackHeight + 3;
-
-        if (
-            camera.position.y <
-            minimumHeight
-        ) {
-            camera.position.y =
-                minimumHeight;
-        }
-    }
-
-    if (
-        camera.position.y < 1
-    ) {
-        camera.position.y = 1;
-    }
-}
-
-function updateBuilderCamera(delta) {
-    const target =
-        track.pieces.length > 0
-            ? track.pieces[
-                track.pieces.length - 1
-            ].end.position
-            : track.startConnector.position;
-
-    const desiredPosition =
-        target.clone();
-
-    desiredPosition.y += 55;
-    desiredPosition.x += 45;
-    desiredPosition.z += 45;
-
-    const smoothing =
-        1 -
-        Math.pow(
-            0.0001,
-            delta
-        );
-
-    camera.position.lerp(
-        desiredPosition,
-        smoothing
-    );
-
-    const lookTarget =
-        target.clone();
-
-    lookTarget.y += 0.5;
-
-    camera.lookAt(
-        lookTarget
-    );
-}
-
-function animate(currentTime) {
+function animate() {
     requestAnimationFrame(
         animate
     );
 
+    const now =
+        performance.now();
+
     const delta =
         Math.min(
-            (currentTime -
+            (now -
                 lastFrameTime) /
                 1000,
             0.05
         );
 
     lastFrameTime =
-        currentTime;
+        now;
 
     if (
-        raceActive &&
-        !countdownActive
+        currentMode === "race"
     ) {
         updateRace(delta);
-    }
 
-    if (
-        currentScreen === "game"
-    ) {
         followCamera.update(
             vehicle,
-            delta
-        );
-
-        clampCameraHeight();
-    }
-
-    if (
-        currentScreen === "builder"
-    ) {
-        updateBuilderCamera(
             delta
         );
     }
@@ -1068,10 +1020,8 @@ function animate(currentTime) {
     );
 }
 
-track.buildDefault();
+loadTrack(1);
 
-showMenu();
+showScreen(menu);
 
-requestAnimationFrame(
-    animate
-);
+animate();

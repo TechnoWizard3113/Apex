@@ -4,74 +4,120 @@ export class FollowCamera {
     constructor(camera) {
         this.camera = camera;
 
-        this.position = new THREE.Vector3();
-        this.lookTarget = new THREE.Vector3();
+        this.lookTarget =
+            new THREE.Vector3();
 
         this.initialized = false;
     }
 
-    update(vehicle, delta) {
+    update(
+        vehicle,
+        delta
+    ) {
         if (!vehicle) {
             return;
         }
 
-        const forward = new THREE.Vector3(
-            Math.sin(vehicle.yaw),
-            0,
-            Math.cos(vehicle.yaw)
-        );
+        const forward =
+            new THREE.Vector3(
+                Math.sin(vehicle.yaw),
+                0,
+                Math.cos(vehicle.yaw)
+            );
 
-        const desiredPosition =
+        const speed =
+            Math.abs(
+                vehicle.speed
+            );
+
+        const distance =
+            15 +
+            Math.min(
+                speed * 0.1,
+                9
+            );
+
+        const desired =
             vehicle.position.clone()
-                .addScaledVector(forward, -13);
+                .addScaledVector(
+                    forward,
+                    -distance
+                );
 
-        desiredPosition.y += 7;
+        desired.y +=
+            6.5 +
+            Math.min(
+                speed * 0.035,
+                4
+            );
 
-        const minimumHeight =
-            vehicle.position.y + 2.2;
+        const smoothing =
+            1 -
+            Math.pow(
+                0.0001,
+                delta
+            );
 
-        if (desiredPosition.y < minimumHeight) {
-            desiredPosition.y = minimumHeight;
-        }
-
-        if (!this.initialized) {
+        if (
+            !this.initialized
+        ) {
             this.camera.position.copy(
-                desiredPosition
+                desired
+            );
+
+            this.lookTarget.copy(
+                vehicle.position
             );
 
             this.initialized = true;
+        } else {
+            this.camera.position.lerp(
+                desired,
+                smoothing
+            );
+
+            const target =
+                vehicle.position.clone();
+
+            target.y += 1.4;
+
+            this.lookTarget.lerp(
+                target,
+                smoothing
+            );
         }
 
-        const smoothing =
-            1 - Math.pow(0.0005, delta);
+        const minimumHeight =
+            vehicle.position.y + 2.5;
 
-        this.camera.position.lerp(
-            desiredPosition,
-            smoothing
-        );
-
-        const target =
-            vehicle.position.clone();
-
-        target.y += 2.2;
-
-        this.lookTarget.lerp(
-            target,
-            smoothing
-        );
+        if (
+            this.camera.position.y <
+            minimumHeight
+        ) {
+            this.camera.position.y =
+                minimumHeight;
+        }
 
         this.camera.lookAt(
             this.lookTarget
         );
 
-        const speed =
-            Math.abs(vehicle.speed || 0);
+        const targetFov =
+            68 +
+            Math.min(
+                speed * 0.09,
+                12
+            );
 
         this.camera.fov =
             THREE.MathUtils.lerp(
                 this.camera.fov,
-                65 + Math.min(speed * 0.08, 8),
-                1 - Math.pow(0.001, delta)
+                targetFov,
+                1 -
+                Math.pow(
+                    0.001,
+                    delta
+                )
             );
 
         this.camera.updateProjectionMatrix();
