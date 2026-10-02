@@ -1,38 +1,21 @@
-const P = 'apex-v2-';
-const d = {
-  settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true, showCheckpoints: true },
-  vehicle: { bodyColor: '#2f8cff', accentColor: '#ffffff', bodyStyle: 'apex', wheelStyle: 'sport' }
-};
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 
-const r = (k, f) => {
-  try {
-    const x = localStorage.getItem(P + k);
-    return x == null ? f : JSON.parse(x);
-  } catch {
-    return f;
+export class Cam {
+  constructor(camera, settings) {
+    this.camera = camera;
+    this.settings = settings;
+    this.target = new THREE.Vector3();
   }
-};
 
-const w = (k, v) => localStorage.setItem(P + k, JSON.stringify(v));
-
-export const settings = () => ({ ...d.settings, ...r('settings', {}) });
-export const saveSettings = x => w('settings', x);
-export const vehicle = () => ({ ...d.vehicle, ...r('vehicle', {}) });
-export const saveVehicle = x => w('vehicle', x);
-export const scores = id => r('scores-' + id, []);
-
-export const score = (id, t) => {
-  let a = [...scores(id), { name: 'YOU', time: t }].sort((a, b) => a.time - b.time).slice(0, 20);
-  w('scores-' + id, a);
-  return a;
-};
-
-export const custom = () => r('custom', []);
-export const saveCustom = x => w('custom', x);
-
-export const reset = () => {
-  for (let i = localStorage.length - 1; i >= 0; i--) {
-    let k = localStorage.key(i);
-    if (k?.startsWith(P)) localStorage.removeItem(k);
+  update(vehicle, dt) {
+    const distance = +this.settings.cameraDistance;
+    const height = +this.settings.cameraHeight;
+    const forward = new THREE.Vector3(Math.sin(vehicle.yaw), 0, Math.cos(vehicle.yaw));
+    const position = vehicle.pos.clone().addScaledVector(forward, -distance);
+    position.y += height;
+    this.camera.position.lerp(position, 1 - Math.pow(0.001, dt));
+    this.target.copy(vehicle.pos).addScaledVector(forward, 8);
+    this.target.y += 1.2;
+    this.camera.lookAt(this.target);
   }
-};
+}

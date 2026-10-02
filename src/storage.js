@@ -29,6 +29,19 @@ export const score = (id, t) => {
 
 export const custom = () => r('custom', []);
 export const saveCustom = x => w('custom', x);
+export const savedTracks = () => {
+  const tracks = r('tracks', null);
+  if (tracks !== null) return tracks;
+  const legacyTrack = custom();
+  return legacyTrack.length ? [{ id: 'custom', name: 'Custom Track', pieces: legacyTrack }] : [];
+};
+export const saveTrack = track => {
+  const tracks = savedTracks();
+  const index = tracks.findIndex(item => item.id === track.id);
+  if (index < 0) tracks.push(track);
+  else tracks[index] = track;
+  w('tracks', tracks);
+};
 
 export const reset = () => {
   for (let i = localStorage.length - 1; i >= 0; i--) {
