@@ -19,6 +19,38 @@ input {
   font: inherit;
 }
 
+dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 26px;
+  color: #fff;
+  background: #10171f;
+  border: 1px solid #526173;
+  border-radius: 12px;
+  box-shadow: 0 25px 100px #000b;
+}
+
+dialog::backdrop {
+  background: #000b;
+}
+
+dialog h2 {
+  margin-top: 0;
+}
+
+dialog p {
+  color: #aab5c0;
+}
+
+.form-error {
+  min-height: 18px;
+  color: #ff8a8a !important;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 button {
   cursor: pointer;
   color: #fff;
@@ -159,6 +191,17 @@ h1 {
   color: #96a2af;
 }
 
+.leaderboard-note {
+  font-size: 12px;
+  margin: -10px 0 14px;
+}
+
+#leaderRows {
+  max-height: min(65vh, 680px);
+  overflow-y: auto;
+  scrollbar-color: #526173 #10171f;
+}
+
 .leader {
   display: grid;
   grid-template-columns: 55px 1fr 140px;
@@ -202,6 +245,7 @@ h1 {
 .piecegrid button {
   font-size: 11px;
   padding: 7px;
+  min-height: 40px;
 }
 
 .builder p {
@@ -246,6 +290,12 @@ h1 {
   border: 1px solid #293541;
   border-radius: 10px;
   overflow: hidden;
+}
+
+.editor-help {
+  color: #9ba7b4;
+  font-size: 12px;
+  margin: 7px 0;
 }
 
 .vehicleEdit label,

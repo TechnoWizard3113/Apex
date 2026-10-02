@@ -1,7 +1,14 @@
 const P = 'apex-v2-';
 const d = {
-  settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true, showCheckpoints: true },
-  vehicle: { bodyColor: '#2f8cff', accentColor: '#ffffff', bodyStyle: 'apex', wheelStyle: 'sport' }
+  settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true },
+  vehicle: {
+    bodyStyle: 'apex',
+    profiles: {
+      apex: { bodyColor: '#2f8cff', accentColor: '#ffffff', wheelStyle: 'sport' },
+      wide: { bodyColor: '#ff8d2f', accentColor: '#ffffff', wheelStyle: 'classic' },
+      arrow: { bodyColor: '#ad63ff', accentColor: '#ffffff', wheelStyle: 'dark' }
+    }
+  }
 };
 
 const r = (k, f) => {
@@ -15,17 +22,44 @@ const r = (k, f) => {
 
 const w = (k, v) => localStorage.setItem(P + k, JSON.stringify(v));
 
-export const settings = () => ({ ...d.settings, ...r('settings', {}) });
+export const settings = () => {
+  const value = { ...d.settings, ...r('settings', {}) };
+  delete value.showCheckpoints;
+  return value;
+};
 export const saveSettings = x => w('settings', x);
-export const vehicle = () => ({ ...d.vehicle, ...r('vehicle', {}) });
+export const vehicle = () => {
+  const stored = r('vehicle', {});
+  const profiles = Object.fromEntries(Object.entries(d.vehicle.profiles).map(([style, defaults]) => [
+    style,
+    { ...defaults, ...(stored.profiles?.[style] || {}) }
+  ]));
+  const legacyStyle = Object.hasOwn(profiles, stored.bodyStyle) ? stored.bodyStyle : 'apex';
+  if (stored.bodyColor || stored.accentColor || stored.wheelStyle) {
+    profiles[legacyStyle] = {
+      ...profiles[legacyStyle],
+      bodyColor: stored.bodyColor || profiles[legacyStyle].bodyColor,
+      accentColor: stored.accentColor || profiles[legacyStyle].accentColor,
+      wheelStyle: stored.wheelStyle || profiles[legacyStyle].wheelStyle
+    };
+  }
+  const bodyStyle = Object.hasOwn(profiles, stored.bodyStyle) ? stored.bodyStyle : d.vehicle.bodyStyle;
+  return { bodyStyle, profiles };
+};
 export const saveVehicle = x => w('vehicle', x);
 export const scores = id => r('scores-' + id, []);
+export const isTopHundred = (id, time) => {
+  const entries = scores(id);
+  return entries.length < 100 || time <= entries[99].time;
+};
 
-export const score = (id, t) => {
-  let a = [...scores(id), { name: 'YOU', time: t }].sort((a, b) => a.time - b.time).slice(0, 20);
+export const score = (id, t, name) => {
+  let a = [...scores(id), { name, time: t }].sort((a, b) => a.time - b.time).slice(0, 100);
   w('scores-' + id, a);
   return a;
 };
+export const playerName = () => r('player-name', '');
+export const savePlayerName = name => w('player-name', name);
 
 export const custom = () => r('custom', []);
 export const saveCustom = x => w('custom', x);

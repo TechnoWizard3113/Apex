@@ -2,7 +2,10 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.m
 import { Track } from './track.js';
 import { Vehicle } from './vehicle.js';
 import { Cam } from './camera.js';
-import { settings, saveSettings, vehicle, saveVehicle, scores, score, custom, saveCustom, savedTracks, saveTrack, reset } from './storage.js';
+import {
+  settings, saveSettings, vehicle, saveVehicle, scores, score, isTopHundred,
+  playerName, savePlayerName, custom, saveCustom, savedTracks, saveTrack, reset
+} from './storage.js';
 
 const $ = x => document.getElementById(x);
 const tracks = [
@@ -10,23 +13,23 @@ const tracks = [
     id: 'mountain',
     name: 'Mountain Run',
     desc: 'Technical starter circuit',
-    p: ['straight', 'straight', 'curveRight', 'straight', 'ramp', 'straight', 'curveLeft', 'boost', 'curveLeft', 'straight', 'bankRight', 'straight', 'curveRight']
+    p: ['start', 'straight', 'straight', 'curveRight', 'straight', 'checkpoint', 'ramp', 'straight', 'curveLeft', 'boost', 'checkpoint', 'curveLeft', 'straight', 'bankRight', 'straight', 'curveRight', 'finish']
   },
   {
     id: 'speed',
     name: 'Speed Circuit',
     desc: 'High speed test track',
-    p: ['straight', 'boost', 'straight', 'curveLeft', 'straight', 'boost', 'curveLeft', 'straight', 'ramp', 'straight', 'curveRight', 'boost', 'straight', 'curveRight']
+    p: ['start', 'straight', 'boost', 'straight', 'curveLeft', 'checkpoint', 'straight', 'boost', 'curveLeft', 'straight', 'checkpoint', 'ramp', 'straight', 'curveRight', 'boost', 'straight', 'curveRight', 'finish']
   }
 ];
 
 let S = settings(),
-  A = vehicle(),
   scene,
   camera,
   renderer,
   track,
   car,
+  showroom,
   follow,
   active,
   running = false,
@@ -39,9 +42,26 @@ let S = settings(),
   rot = 0,
   selectedPiece = null,
   editingTrackId = null,
-  countdownTimer = null;
+  countdownTimer = null,
+  resultTime = null,
+  editorMode = 'builder',
+  orbit = {
+    theta: 0,
+    phi: 0.95,
+    radius: 75,
+    target: new THREE.Vector3(),
+    dragging: false,
+    lastX: 0,
+    lastY: 0
+  };
 
 let c = { throttle: false, brake: false, left: false, right: false };
+let A = vehicle();
+let appearance = currentAppearance();
+
+function currentAppearance(style = A.bodyStyle) {
+  return { ...A.profiles[style], bodyStyle: style };
+}
 
 const fmt = t => {
   if (!isFinite(t)) return '--:--.---';
@@ -52,7 +72,10 @@ const fmt = t => {
 function show(id) {
   ['menu', 'tracksScreen', 'leaderScreen', 'builderScreen', 'vehicleScreen', 'settingsScreen'].forEach(x => $(x).classList.add('hidden'));
   $(id).classList.remove('hidden');
-  if (renderer) requestAnimationFrame(() => resizeRenderer(renderer.domElement.parentElement));
+  if (renderer) requestAnimationFrame(() => {
+    resizeRenderer(renderer.domElement.parentElement);
+    updateEditorCamera();
+  });
 }
 
 function resizeRenderer(container) {
@@ -62,6 +85,81 @@ function resizeRenderer(container) {
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+}
+
+function updateEditorCamera() {
+  if (!camera || (editorMode !== 'builder' && editorMode !== 'vehicle')) return;
+  const sinPhi = Math.sin(orbit.phi);
+  camera.position.set(
+    orbit.target.x + orbit.radius * sinPhi * Math.sin(orbit.theta),
+    orbit.target.y + orbit.radius * Math.cos(orbit.phi),
+    orbit.target.z + orbit.radius * sinPhi * Math.cos(orbit.theta)
+  );
+  camera.lookAt(orbit.target);
+}
+
+function focusBuilder() {
+  const points = [track.spawn, ...track.p.map(piece => piece.end)];
+  const bounds = new THREE.Box3().setFromPoints(points);
+  bounds.getCenter(orbit.target);
+  orbit.target.y = Math.max(0, orbit.target.y);
+  orbit.radius = THREE.MathUtils.clamp(bounds.getSize(new THREE.Vector3()).length() * 0.75 + 24, 38, 180);
+  orbit.theta = 0;
+  orbit.phi = 0.88;
+  updateEditorCamera();
+}
+
+function setEditorMode(mode) {
+  editorMode = mode;
+  track.group.visible = mode !== 'vehicle';
+  car.group.visible = mode !== 'builder';
+  showroom.visible = mode === 'vehicle';
+  if (mode === 'builder') focusBuilder();
+  else if (mode === 'vehicle') {
+    orbit.target.set(0, 1.1, 0);
+    orbit.radius = 11;
+    orbit.theta = 0.75;
+    orbit.phi = 1.15;
+    updateEditorCamera();
+  }
+}
+
+function bindEditorControls(canvas) {
+  canvas.addEventListener('pointerdown', event => {
+    if (editorMode !== 'builder' && editorMode !== 'vehicle') return;
+    orbit.dragging = true;
+    orbit.lastX = event.clientX;
+    orbit.lastY = event.clientY;
+    canvas.setPointerCapture(event.pointerId);
+  });
+  canvas.addEventListener('pointermove', event => {
+    if (!orbit.dragging) return;
+    const dx = event.clientX - orbit.lastX;
+    const dy = event.clientY - orbit.lastY;
+    orbit.lastX = event.clientX;
+    orbit.lastY = event.clientY;
+    if (event.shiftKey || event.buttons === 2) {
+      const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+      const up = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+      const scale = orbit.radius * 0.0015;
+      orbit.target.addScaledVector(right, -dx * scale).addScaledVector(up, dy * scale);
+    } else {
+      orbit.theta -= dx * 0.008;
+      orbit.phi = THREE.MathUtils.clamp(orbit.phi + dy * 0.008, 0.12, Math.PI / 2);
+    }
+    updateEditorCamera();
+  });
+  canvas.addEventListener('pointerup', event => {
+    orbit.dragging = false;
+    if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+  });
+  canvas.addEventListener('wheel', event => {
+    if (editorMode !== 'builder' && editorMode !== 'vehicle') return;
+    event.preventDefault();
+    orbit.radius = THREE.MathUtils.clamp(orbit.radius * Math.exp(event.deltaY * 0.001), 5, 220);
+    updateEditorCamera();
+  }, { passive: false });
+  canvas.addEventListener('contextmenu', event => event.preventDefault());
 }
 
 function init(id) {
@@ -81,6 +179,7 @@ function init(id) {
   renderer.domElement.style.height = '100%';
   renderer.shadowMap.enabled = S.graphics !== 'low';
   container.appendChild(renderer.domElement);
+  bindEditorControls(renderer.domElement);
 
   scene.add(new THREE.HemisphereLight(0xffffff, 0x263020, 1.8));
   let l = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -89,7 +188,16 @@ function init(id) {
   scene.add(l);
 
   track = new Track(scene);
-  car = new Vehicle(scene, A);
+  showroom = new THREE.Group();
+  const platform = new THREE.Mesh(
+    new THREE.CylinderGeometry(8, 8, 0.35, 64),
+    new THREE.MeshStandardMaterial({ color: 0x28333d, roughness: 0.75, metalness: 0.2 })
+  );
+  platform.position.y = -0.2;
+  platform.receiveShadow = true;
+  showroom.add(platform);
+  scene.add(showroom);
+  car = new Vehicle(scene, appearance);
   follow = new Cam(camera, S);
   camera.position.set(0, 32, 58);
   camera.lookAt(0, 0, 20);
@@ -98,8 +206,14 @@ function init(id) {
 
 function race(t) {
   init('gameView');
+  clearPreview();
+  editorMode = 'race';
+  track.group.visible = true;
+  car.group.visible = true;
+  showroom.visible = false;
   track.build(t.p);
-  car.setAppearance(A);
+  car.setAppearance(appearance);
+  c = { throttle: false, brake: false, left: false, right: false };
   let sp = track.getSpawn();
   car.reset(sp.position, sp.yaw);
   follow.update(car, 1);
@@ -134,12 +248,43 @@ function race(t) {
 function finish() {
   if (finished) return;
   finished = true;
-  let t = performance.now() - start,
-    a = score(active.id, t);
-  $('time').textContent = fmt(t);
-  $('best').textContent = fmt(a[0].time);$('finish').textContent = `FINISH  ${fmt(t)}`;
+  running = false;
+  resultTime = performance.now() - start;
+  $('time').textContent = fmt(resultTime);
+  $('finish').textContent = `FINISH  ${fmt(resultTime)}`;
   $('finish').classList.remove('hidden');
+  if (isTopHundred(active.id, resultTime)) {
+    $('usernameInput').value = playerName() || 'Racer';
+    $('usernameError').textContent = '';
+    $('usernameDialog').showModal();
+  } else {
+    recordResult(playerName() || 'Racer');
+  }
 }
+
+function recordResult(name) {
+  const results = score(active.id, resultTime, name);
+  $('best').textContent = fmt(results[0].time);
+}
+
+$('usernameForm').addEventListener('submit', event => {
+  event.preventDefault();
+  const name = $('usernameInput').value.trim().replace(/\s+/g, ' ');
+  const normalizedName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  const inappropriate = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'piss']
+    .some(word => normalizedName.includes(word));
+  if (!/^[\p{L}\p{N}_-]+(?: [\p{L}\p{N}_-]+)*$/u.test(name) || name.length < 3 || name.length > 16 || inappropriate) {
+    $('usernameError').textContent = 'Use a clean name with 3–16 letters, numbers, spaces, _ or -.';
+    return;
+  }
+  savePlayerName(name);
+  $('usernameDialog').close();
+  recordResult(name);
+});
+$('usernameDialog').addEventListener('cancel', event => event.preventDefault());
+$('usernameDialog').addEventListener('click', event => {
+  if (event.target === $('usernameDialog')) event.preventDefault();
+});
 
 function loop(now) {
   requestAnimationFrame(loop);
@@ -155,7 +300,7 @@ function loop(now) {
     if (ci < track.checkpoints.length) {
       let cp = track.checkpoints[ci];
       let d2d = Math.hypot(car.pos.x - cp.x, car.pos.z - cp.z);
-      if (d2d < 16 && Math.abs(car.pos.y - cp.y) < 10) {
+      if (d2d < 7 && Math.abs(car.pos.y - cp.y) < 10) {
         ci++;
         $('checkpoint').textContent = `CHECKPOINT ${ci}/${track.checkpoints.length}`;
       }
@@ -164,7 +309,7 @@ function loop(now) {
     if (ci >= track.checkpoints.length) {
       let fin = track.finish;
       let d2d = Math.hypot(car.pos.x - fin.x, car.pos.z - fin.z);
-      if (d2d < 16 && Math.abs(car.pos.y - fin.y) < 10) finish();
+      if (d2d < 6 && Math.abs(car.pos.y - fin.y) < 10) finish();
     }
 
     follow.update(car, dt);
@@ -229,7 +374,13 @@ function renderLeader(t) {
   a.forEach((x, i) => {
     let d = document.createElement('div');
     d.className = 'leader';
-    d.innerHTML = `<span>${i + 1}</span><span>${x.name}</span><span>${fmt(x.time)}</span>`;
+    const rank = document.createElement('span');
+    rank.textContent = String(i + 1);
+    const name = document.createElement('span');
+    name.textContent = x.name || 'RACER';
+    const time = document.createElement('span');
+    time.textContent = fmt(x.time);
+    d.append(rank, name, time);
     b.appendChild(d);
   });
 }
@@ -258,10 +409,10 @@ function renderPreview() {
   let geo = new THREE.BoxGeometry(12, 0.5, 28);
   let mat = new THREE.MeshStandardMaterial({ color: 0x32d583, transparent: true, opacity: 0.45 });
   preview = new THREE.Mesh(geo, mat);
-  const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+  const forward = new THREE.Vector3(-Math.sin(yaw), 0, Math.cos(yaw));
   preview.position.copy(startPoint).addScaledVector(forward, 14);
   preview.position.y += startPoint.y;
-  preview.rotation.y = yaw;
+  preview.rotation.y = -yaw;
   scene.add(preview);
   $('buildStatus').textContent = `Preview ${selectedPiece}. ${entries.length} pieces placed. Q/E rotate, Enter place.`;
 }
@@ -278,6 +429,22 @@ function makePieceKey() {
 
 function placePiece() {
   if (!selectedPiece) return;
+  if (entries.length === 0 && selectedPiece !== 'start') {
+    $('buildStatus').textContent = 'Place the START piece first.';
+    return;
+  }
+  if (selectedPiece === 'start' && entries.length > 0) {
+    $('buildStatus').textContent = 'The START piece must be first.';
+    return;
+  }
+  if (entries.at(-1)?.type === 'finish') {
+    $('buildStatus').textContent = 'The FINISH piece ends the track. Undo it before adding more pieces.';
+    return;
+  }
+  if (selectedPiece === 'finish' && entries.some(piece => piece.type === 'finish')) {
+    $('buildStatus').textContent = 'A track can only have one FINISH piece.';
+    return;
+  }
   entries.push({ key: makePieceKey(), type: selectedPiece, rotation: rot });
   rot = 0;
   rebuild();
@@ -286,27 +453,56 @@ function placePiece() {
 function openBuilder(saved = null) {
   init('builderView');
   editingTrackId = saved?.id || null;
-  entries = saved ? saved.pieces.map(piece => ({ ...piece })) : custom();
+  entries = (saved ? saved.pieces : custom()).map(piece => {
+    if (typeof piece === 'string') return { key: makePieceKey(), type: piece, rotation: 0 };
+    return { ...piece, key: piece.key || makePieceKey() };
+  });
+  if (entries[0]?.type !== 'start') {
+    entries.unshift({ key: makePieceKey(), type: 'start', rotation: 0 });
+  }
   $('trackName').value = saved?.name || '';
   selectedPiece = null;
   rot = 0;
+  car.group.visible = false;
+  track.group.visible = true;
+  showroom.visible = false;
+  editorMode = 'builder';
   rebuild();
+  focusBuilder();
   show('builderScreen');
 }
 
 function vehicleUI() {
-  $('bodyColor').value = A.bodyColor;
-  $('accentColor').value = A.accentColor;
-  $('bodyStyle').value = A.bodyStyle;
-  $('wheelStyle').value = A.wheelStyle;
   init('vehicleView');
+  car.reset(new THREE.Vector3(0, 0, 0), 0);
+  track.group.visible = false;
+  car.group.visible = true;
+  editorMode = 'vehicle';
+  loadVehicleProfile();
+  setEditorMode('vehicle');
+}
+
+function loadVehicleProfile() {
+  appearance = currentAppearance();
+  $('bodyColor').value = appearance.bodyColor;
+  $('accentColor').value = appearance.accentColor;
+  $('bodyStyle').value = A.bodyStyle;
+  $('wheelStyle').value = appearance.wheelStyle;
+  if (car) car.setAppearance(appearance);
+}
+
+function updateVehicleProfile() {
+  A.bodyStyle = $('bodyStyle').value;
+  A.profiles[A.bodyStyle] = {
+    bodyColor: $('bodyColor').value,
+    accentColor: $('accentColor').value,
+    wheelStyle: $('wheelStyle').value
+  };
+  appearance = currentAppearance();
+  if (car) car.setAppearance(appearance);
 }
 
 $('play').onclick = () => {
-  renderTracks();
-  show('tracksScreen');
-};
-$('tracks').onclick = () => {
   renderTracks();
   show('tracksScreen');
 };
@@ -323,7 +519,6 @@ $('settings').onclick = () => {
   $('camDistance').value = S.cameraDistance;
   $('camHeight').value = S.cameraHeight;
   $('showSpeed').checked = S.showSpeed;
-  $('showCheckpoints').checked = S.showCheckpoints;
 };
 
 document.querySelectorAll('[data-back]').forEach(b => (b.onclick = () => show(b.dataset.back)));
@@ -342,15 +537,16 @@ $('clear').onclick = () => {
   rebuild();
 };
 $('test').onclick = () => {
-  if (entries.length < 3) {
-    $('buildStatus').textContent = 'Add at least 3 pieces before testing the track.';
+  if (entries.length < 3 || entries[0]?.type !== 'start' || entries.at(-1)?.type !== 'finish') {
+    $('buildStatus').textContent = 'Tracks need a START piece first and a FINISH piece last.';
     return;
   }
+  clearPreview();
   race({ id: editingTrackId || 'custom-preview', name: $('trackName').value.trim() || 'Custom Track', p: entries });
 };
 $('saveTrack').onclick = () => {
-  if (entries.length < 3) {
-    $('buildStatus').textContent = 'Add at least 3 pieces before saving the track.';
+  if (entries.length < 3 || entries[0]?.type !== 'start' || entries.at(-1)?.type !== 'finish') {
+    $('buildStatus').textContent = 'Tracks need a START piece first and a FINISH piece last.';
     return;
   }
   const name = $('trackName').value.trim() || 'My Track';
@@ -359,15 +555,19 @@ $('saveTrack').onclick = () => {
   $('buildStatus').textContent = `"${name}" saved. Track edits are also saved as you build.`;
 };
 $('saveVehicle').onclick = () => {
-  A = {
-    bodyColor: $('bodyColor').value,
-    accentColor: $('accentColor').value,
-    bodyStyle: $('bodyStyle').value,
-    wheelStyle: $('wheelStyle').value
-  };
+  updateVehicleProfile();
   saveVehicle(A);
-  if (car) car.setAppearance(A);
+  $('vehicleStatus').textContent = 'Vehicle appearance saved.';
 };
+
+$('bodyStyle').onchange = () => {
+  A.bodyStyle = $('bodyStyle').value;
+  loadVehicleProfile();
+};
+['bodyColor', 'accentColor', 'wheelStyle'].forEach(id => {
+  $(id).oninput = updateVehicleProfile;
+  $(id).onchange = updateVehicleProfile;
+});
 
 $('graphics').onchange = e => {   S.graphics = e.target.value;   saveSettings(S);   if (renderer) renderer.shadowMap.enabled = S.graphics !== 'low'; };$('camDistance').oninput = e => {
   S.cameraDistance = +e.target.value;
@@ -378,7 +578,7 @@ $('camHeight').oninput = e => {   S.cameraHeight = +e.target.value;   saveSettin
   S.showSpeed = e.target.checked;
   saveSettings(S);
 };
-$('showCheckpoints').onchange = e => {   S.showCheckpoints = e.target.checked;   saveSettings(S); };$('reset').onclick = () => {
+$('reset').onclick = () => {
   if (confirm('Reset all Apex local data?')) {
     reset();
     location.reload();
@@ -433,9 +633,8 @@ addEventListener('resize', () => {
     const container = renderer.domElement.parentElement;
     const width = container?.clientWidth || innerWidth;
     const height = container?.clientHeight || innerHeight;
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
     resizeRenderer(container);
+    updateEditorCamera();
   }
 });
 

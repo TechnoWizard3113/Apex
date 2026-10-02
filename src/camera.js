@@ -10,7 +10,7 @@ export class Cam {
   update(vehicle, dt) {
     const distance = +this.settings.cameraDistance;
     const height = +this.settings.cameraHeight;
-    const forward = new THREE.Vector3(Math.sin(vehicle.yaw), 0, Math.cos(vehicle.yaw));
+    const forward = new THREE.Vector3(-Math.sin(vehicle.yaw), 0, Math.cos(vehicle.yaw));
     const position = vehicle.pos.clone().addScaledVector(forward, -distance);
     position.y += height;
     this.camera.position.lerp(position, 1 - Math.pow(0.001, dt));

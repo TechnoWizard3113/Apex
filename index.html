@@ -14,7 +14,6 @@
       <div class="menu">
         <button id="play">PLAY</button>
         <button id="build">BUILD</button>
-        <button id="tracks">TRACKS</button>
         <button id="vehicle">VEHICLE</button>
         <button id="settings">SETTINGS</button>
       </div>
@@ -43,6 +42,7 @@
         </div>
         <button data-back="tracksScreen">BACK</button>
       </header>
+      <p class="muted leaderboard-note">Top 100 times saved in this browser. Shared online leaderboards can be added with Supabase later.</p>
       <div id="leaderRows"></div>
     </div>
   </section>
@@ -59,7 +59,9 @@
       <div class="builder">
         <div id="builderView"></div>
         <aside>
+          <p class="editor-help">Place START first and FINISH last. Drag to orbit, scroll to zoom, Shift-drag to pan. Choose a piece and place it. Q/E rotate; Z undo.</p>
           <div id="pieces" class="piecegrid">
+            <button data-piece="start">START</button>
             <button data-piece="straight">STRAIGHT</button>
             <button data-piece="curveLeft">LEFT CURVE</button>
             <button data-piece="curveRight">RIGHT CURVE</button>
@@ -67,6 +69,8 @@
             <button data-piece="boost">BOOST</button>
             <button data-piece="bankLeft">LEFT BANK</button>
             <button data-piece="bankRight">RIGHT BANK</button>
+            <button data-piece="checkpoint">CHECKPOINT</button>
+            <button data-piece="finish">FINISH</button>
           </div>
           <button id="placePiece">PLACE PIECE</button>
           <p id="buildStatus">Select a piece, then click PLACE PIECE or press Enter. Q/E rotate; Z undo.</p>
@@ -109,6 +113,7 @@
             </select>
           </label>
           <button id="saveVehicle">SAVE</button>
+          <p id="vehicleStatus" class="editor-help">Drag to orbit the car; scroll to zoom. Each body style keeps its own colors and wheels.</p>
         </div>
       </div>
     </div>
@@ -133,7 +138,6 @@
       <label>CAMERA DISTANCE<input id="camDistance" type="range" min="6" max="18"></label>
       <label>CAMERA HEIGHT<input id="camHeight" type="range" min="2" max="10"></label>
       <label class="check">SHOW SPEED<input id="showSpeed" type="checkbox"></label>
-      <label class="check">SHOW CHECKPOINTS<input id="showCheckpoints" type="checkbox"></label>
       <button id="reset">RESET LOCAL DATA</button>
     </div>
   </section>
@@ -152,6 +156,18 @@
       <button id="hudMenu">MENU</button>
     </div>
   </main>
+
+  <dialog id="usernameDialog">
+    <form id="usernameForm">
+      <h2>New top 100 time!</h2>
+      <p>Your time made this browser’s leaderboard. Choose a display name.</p>
+      <label class="track-name">USERNAME<input id="usernameInput" type="text" maxlength="16" autocomplete="nickname" required></label>
+      <p id="usernameError" class="form-error" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button type="submit">SAVE TIME</button>
+      </div>
+    </form>
+  </dialog>
 
   <script type="module" src="./src/main.js"></script>
 </body>
