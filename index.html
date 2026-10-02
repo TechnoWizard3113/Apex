@@ -15,9 +15,9 @@
             <div class="subtitle">BUILD. RACE. IMPROVE.</div>
 
             <div class="menu-buttons">
-                <button id="playButton">PLAY</button>
-                <button id="buildButton">BUILD</button>
-                <button id="tracksButton">TRACKS</button>
+                <button id="playButton" type="button">PLAY</button>
+                <button id="buildButton" type="button">BUILD</button>
+                <button id="tracksButton" type="button">TRACKS</button>
             </div>
         </div>
     </section>
@@ -26,17 +26,28 @@
         <div class="panel">
             <h1>TRACKS</h1>
 
-            <button class="track-option" data-track-id="1">
+            <button
+                class="track-option"
+                data-track-id="1"
+                type="button"
+            >
                 <span>Mountain Run</span>
                 <small>Technical starter circuit</small>
             </button>
 
-            <button class="track-option" data-track-id="2">
+            <button
+                class="track-option"
+                data-track-id="2"
+                type="button"
+            >
                 <span>Speed Circuit</span>
                 <small>High speed test track</small>
             </button>
 
-            <button id="trackBackButton">
+            <button
+                id="trackBackButton"
+                type="button"
+            >
                 BACK
             </button>
         </div>
@@ -55,31 +66,31 @@
 
             <div class="piece-buttons">
 
-                <button data-piece="straight">
+                <button data-piece="straight" type="button">
                     STRAIGHT
                 </button>
 
-                <button data-piece="curveLeft">
+                <button data-piece="curveLeft" type="button">
                     CURVE LEFT
                 </button>
 
-                <button data-piece="curveRight">
+                <button data-piece="curveRight" type="button">
                     CURVE RIGHT
                 </button>
 
-                <button data-piece="ramp">
+                <button data-piece="ramp" type="button">
                     RAMP
                 </button>
 
-                <button data-piece="bankLeft">
+                <button data-piece="bankLeft" type="button">
                     BANK LEFT
                 </button>
 
-                <button data-piece="bankRight">
+                <button data-piece="bankRight" type="button">
                     BANK RIGHT
                 </button>
 
-                <button data-piece="boost">
+                <button data-piece="boost" type="button">
                     BOOST
                 </button>
 
@@ -87,23 +98,23 @@
 
             <div class="builder-actions">
 
-                <button id="undoButton">
+                <button id="undoButton" type="button">
                     UNDO
                 </button>
 
-                <button id="redoButton">
+                <button id="redoButton" type="button">
                     REDO
                 </button>
 
-                <button id="testTrackButton">
+                <button id="testTrackButton" type="button">
                     TEST TRACK
                 </button>
 
-                <button id="clearTrackButton">
+                <button id="clearTrackButton" type="button">
                     CLEAR
                 </button>
 
-                <button id="builderBackButton">
+                <button id="builderBackButton" type="button">
                     BACK
                 </button>
 
@@ -160,13 +171,16 @@
 
         </div>
 
-        <button id="pauseButton">
+        <button id="pauseButton" type="button">
             MENU
         </button>
 
     </main>
 
-    <script type="module" src="./src/main.js"></script>
+    <script
+        type="module"
+        src="./src/main.js"
+    ></script>
 
 </body>
 </html>
