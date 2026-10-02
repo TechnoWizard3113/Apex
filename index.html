@@ -3,29 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Apex Test</title>
+    <title>Apex JavaScript Test</title>
 </head>
 
 <body>
 
-    <h1>APEX TEST</h1>
+    <h1>APEX JAVASCRIPT TEST</h1>
 
     <button id="testButton" type="button">
-        CLICK ME
+        TEST JAVASCRIPT
     </button>
 
     <p id="result">
-        Not clicked.
+        Waiting...
     </p>
 
-    <script>
-        const button = document.getElementById("testButton");
-        const result = document.getElementById("result");
-
-        button.addEventListener("click", function () {
-            result.textContent = "BUTTON WORKS";
-        });
-    </script>
+    <script type="module" src="./src/test.js"></script>
 
 </body>
 </html>
