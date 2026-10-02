@@ -3,184 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Apex</title>
-    <link rel="stylesheet" href="./style.css">
+    <title>Apex Test</title>
 </head>
 
 <body>
 
-    <section id="menu" class="screen">
-        <div class="menu-panel">
-            <div class="logo">APEX</div>
-            <div class="subtitle">BUILD. RACE. IMPROVE.</div>
+    <h1>APEX TEST</h1>
 
-            <div class="menu-buttons">
-                <button id="playButton" type="button">PLAY</button>
-                <button id="buildButton" type="button">BUILD</button>
-                <button id="tracksButton" type="button">TRACKS</button>
-            </div>
-        </div>
-    </section>
+    <button id="testButton" type="button">
+        CLICK ME
+    </button>
 
-    <section id="trackSelect" class="screen hidden">
-        <div class="panel">
-            <h1>TRACKS</h1>
+    <p id="result">
+        Not clicked.
+    </p>
 
-            <button
-                class="track-option"
-                data-track-id="1"
-                type="button"
-            >
-                <span>Mountain Run</span>
-                <small>Technical starter circuit</small>
-            </button>
+    <script>
+        const button = document.getElementById("testButton");
+        const result = document.getElementById("result");
 
-            <button
-                class="track-option"
-                data-track-id="2"
-                type="button"
-            >
-                <span>Speed Circuit</span>
-                <small>High speed test track</small>
-            </button>
-
-            <button
-                id="trackBackButton"
-                type="button"
-            >
-                BACK
-            </button>
-        </div>
-    </section>
-
-    <section id="builder" class="screen hidden">
-        <div class="builder-panel">
-
-            <div class="builder-title">
-                TRACK BUILDER
-            </div>
-
-            <div class="builder-help">
-                Select a piece, rotate with Q/E, then press ENTER to place.
-            </div>
-
-            <div class="piece-buttons">
-
-                <button data-piece="straight" type="button">
-                    STRAIGHT
-                </button>
-
-                <button data-piece="curveLeft" type="button">
-                    CURVE LEFT
-                </button>
-
-                <button data-piece="curveRight" type="button">
-                    CURVE RIGHT
-                </button>
-
-                <button data-piece="ramp" type="button">
-                    RAMP
-                </button>
-
-                <button data-piece="bankLeft" type="button">
-                    BANK LEFT
-                </button>
-
-                <button data-piece="bankRight" type="button">
-                    BANK RIGHT
-                </button>
-
-                <button data-piece="boost" type="button">
-                    BOOST
-                </button>
-
-            </div>
-
-            <div class="builder-actions">
-
-                <button id="undoButton" type="button">
-                    UNDO
-                </button>
-
-                <button id="redoButton" type="button">
-                    REDO
-                </button>
-
-                <button id="testTrackButton" type="button">
-                    TEST TRACK
-                </button>
-
-                <button id="clearTrackButton" type="button">
-                    CLEAR
-                </button>
-
-                <button id="builderBackButton" type="button">
-                    BACK
-                </button>
-
-            </div>
-
-            <div id="builderStatus">
-                Select a piece.
-            </div>
-
-        </div>
-    </section>
-
-    <main id="game">
-
-        <div id="hud">
-
-            <div class="hud-top">
-
-                <div class="hud-box">
-                    <span class="hud-label">
-                        TIME
-                    </span>
-
-                    <span id="timer">
-                        00:00.000
-                    </span>
-                </div>
-
-                <div class="hud-box">
-                    <span class="hud-label">
-                        BEST
-                    </span>
-
-                    <span id="bestTime">
-                        --:--.---
-                    </span>
-                </div>
-
-            </div>
-
-            <div id="countdown"></div>
-
-            <div class="hud-bottom">
-
-                <span id="speed">
-                    0 KM/H
-                </span>
-
-                <span id="checkpoint">
-                    CHECKPOINT 0/0
-                </span>
-
-            </div>
-
-        </div>
-
-        <button id="pauseButton" type="button">
-            MENU
-        </button>
-
-    </main>
-
-    <script
-        type="module"
-        src="./src/main.js"
-    ></script>
+        button.addEventListener("click", function () {
+            result.textContent = "BUTTON WORKS";
+        });
+    </script>
 
 </body>
 </html>
