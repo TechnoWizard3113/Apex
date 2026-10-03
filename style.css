@@ -19,38 +19,6 @@ input {
   font: inherit;
 }
 
-dialog {
-  width: min(440px, calc(100vw - 32px));
-  padding: 26px;
-  color: #fff;
-  background: #10171f;
-  border: 1px solid #526173;
-  border-radius: 12px;
-  box-shadow: 0 25px 100px #000b;
-}
-
-dialog::backdrop {
-  background: #000b;
-}
-
-dialog h2 {
-  margin-top: 0;
-}
-
-dialog p {
-  color: #aab5c0;
-}
-
-.form-error {
-  min-height: 18px;
-  color: #ff8a8a !important;
-}
-
-.dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
 button {
   cursor: pointer;
   color: #fff;
@@ -204,7 +172,7 @@ h1 {
 
 .leader {
   display: grid;
-  grid-template-columns: 55px 1fr 140px;
+  grid-template-columns: 55px 1fr;
   padding: 13px;
   border: 1px solid #27313d;
   background: #121920;
@@ -236,6 +204,25 @@ h1 {
   border-radius: 10px;
 }
 
+.mountain-choice {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0;
+  color: #9ba7b4;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.mountain-choice select {
+  height: 42px;
+  padding: 7px;
+  color: #fff;
+  background: #171f28;
+  border: 1px solid #354150;
+  border-radius: 7px;
+}
+
 .piecegrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -246,6 +233,12 @@ h1 {
   font-size: 11px;
   padding: 7px;
   min-height: 40px;
+}
+
+.piecegrid button.selected {
+  border-color: #32d583;
+  background: #163b31;
+  box-shadow: 0 0 0 1px #32d58366;
 }
 
 .builder p {
@@ -272,6 +265,18 @@ h1 {
   background: #171f28;
   border: 1px solid #354150;
   border-radius: 7px;
+}
+
+.track-name textarea {
+  width: 100%;
+  padding: 8px 10px;
+  color: #fff;
+  background: #171f28;
+  border: 1px solid #354150;
+  border-radius: 7px;
+  resize: vertical;
+  font: 12px/1.5 monospace;
+  letter-spacing: normal;
 }
 
 .builder aside>button {
@@ -410,8 +415,15 @@ h1 {
   right: 18px;
   bottom: 18px;
   display: flex;
+  gap: 10px;
   justify-content: space-between;
   align-items: center;
+}
+
+.drive-hint {
+  max-width: 55%;
+  font-size: 10px;
+  text-align: center;
 }
 
 .bottom button {
@@ -447,5 +459,9 @@ h1 {
 
   .hero {
     padding: 35px 22px;
+  }
+
+  .drive-hint {
+    display: none;
   }
 }

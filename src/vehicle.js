@@ -9,6 +9,25 @@ export class Vehicle {
     this.pos = new THREE.Vector3();
     this.speed = 0;
     this.yaw = 0;
+    this.skidTimer = 0;
+    this.skidPrevious = [null, null];
+    this.skidSegments = [0, 0];
+    this.skidGeometries = [];
+    this.maxSkidSegments = 1200;
+    for (let side = 0; side < 2; side++) {
+      const geometry = new THREE.BufferGeometry();
+      const positions = new Float32Array(this.maxSkidSegments * 6);
+      const attribute = new THREE.BufferAttribute(positions, 3);
+      attribute.setUsage(THREE.DynamicDrawUsage);
+      geometry.setAttribute('position', attribute);
+      const line = new THREE.LineSegments(
+        geometry,
+        new THREE.LineBasicMaterial({ color: 0x25282b, transparent: true, opacity: 0.7 })
+      );
+      line.frustumCulled = false;
+      this.scene.add(line);
+      this.skidGeometries.push({ geometry, attribute, line });
+    }
     this.build();
   }
 
@@ -36,6 +55,18 @@ export class Vehicle {
       color: 0x183344,
       roughness: 0.18,
       metalness: 0.25
+    });
+    const trimMaterial = new THREE.MeshStandardMaterial({ color: 0x161b20, roughness: 0.65 });
+    const headlightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xe9f4ff,
+      emissive: 0xa8d8ff,
+      emissiveIntensity: 0.7,
+      roughness: 0.25
+    });
+    const tailLightMaterial = new THREE.MeshStandardMaterial({
+      color: 0xe52e35,
+      emissive: 0x8f1018,
+      emissiveIntensity: 0.8
     });
     const wheelColor = this.appearance.wheelStyle === 'dark' ? 0x111317 :
       this.appearance.wheelStyle === 'classic' ? 0xb7bec3 : 0x252a30;
@@ -70,6 +101,37 @@ export class Vehicle {
     cabin.castShadow = true;
     this.group.add(cabin);
 
+    const addDetail = (geometry, material, position) => {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(...position);
+      mesh.castShadow = true;
+      this.group.add(mesh);
+    };
+    addDetail(new THREE.BoxGeometry(dimensions.width * 0.72, 0.13, 0.18), trimMaterial,
+      [0, 0.64, dimensions.length * 0.5 - 0.04]);
+    addDetail(new THREE.BoxGeometry(dimensions.width * 0.76, 0.13, 0.18), trimMaterial,
+      [0, 0.64, -dimensions.length * 0.5 + 0.04]);
+    addDetail(new THREE.BoxGeometry(dimensions.width * 0.42, 0.12, 0.08), trimMaterial,
+      [0, 0.9, dimensions.length * 0.5 + 0.01]);
+    for (const x of [-dimensions.width * 0.31, dimensions.width * 0.31]) {
+      addDetail(new THREE.BoxGeometry(0.42, 0.2, 0.12), headlightMaterial,
+        [x, 0.94, dimensions.length * 0.5 + 0.04]);
+      addDetail(new THREE.BoxGeometry(0.38, 0.18, 0.12), tailLightMaterial,
+        [x, 0.92, -dimensions.length * 0.5 - 0.04]);
+      const mirror = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.16, 0.3), accentMaterial);
+      mirror.position.set(x * 1.16, 1.42, 0.45);
+      mirror.castShadow = true;
+      this.group.add(mirror);
+    }
+    for (let i = -2; i <= 2; i++) {
+      addDetail(new THREE.BoxGeometry(0.08, 0.42, 0.08), trimMaterial,
+        [i * 0.24, 0.86, dimensions.length * 0.5 + 0.1]);
+    }
+    for (const side of [-1, 1]) {
+      addDetail(new THREE.BoxGeometry(0.12, 0.2, dimensions.length * 0.56), accentMaterial,
+        [side * (dimensions.width / 2 + 0.015), 0.56, -0.05]);
+    }
+
     if (style !== 'apex') {
       const spoiler = new THREE.Mesh(
         new THREE.BoxGeometry(style === 'wide' ? 3.1 : 2.3, 0.14, 0.45),
@@ -85,6 +147,7 @@ export class Vehicle {
     }
 
     const wheelMaterial = new THREE.MeshStandardMaterial({ color: wheelColor, roughness: 0.85 });
+    const hubMaterial = new THREE.MeshStandardMaterial({ color: 0x9aa2a8, metalness: 0.65, roughness: 0.35 });
     const wheelX = dimensions.width / 2 - 0.12;
     const wheelRadius = this.appearance.wheelStyle === 'classic' ? 0.45 : 0.4;
     for (const x of [-wheelX, wheelX]) {
@@ -97,6 +160,11 @@ export class Vehicle {
         wheel.position.set(x, wheelRadius, z);
         wheel.castShadow = true;
         this.group.add(wheel);
+        const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.19, 0.32, 16), hubMaterial);
+        hub.rotation.z = Math.PI / 2;
+        hub.position.set(x, wheelRadius, z);
+        hub.castShadow = true;
+        this.group.add(hub);
       }
     }
   }
@@ -107,6 +175,7 @@ export class Vehicle {
   }
 
   reset(position, yaw) {
+    this.clearSkids();
     this.pos.copy(position);
     this.pos.y += 0.16;
     this.yaw = yaw;
@@ -119,16 +188,22 @@ export class Vehicle {
     const throttle = controls.throttle ? 1 : 0;
     const brake = controls.brake ? 1 : 0;
     const steering = (controls.right ? 1 : 0) - (controls.left ? 1 : 0);
-    this.speed += ((throttle ? 34 : 0) - (brake ? 45 : 0)) * dt;
-    this.speed -= this.speed * (throttle ? 0.45 : 1.2) * dt;
-    this.speed = THREE.MathUtils.clamp(this.speed, 0, 72);
-    this.yaw += steering * Math.min(1, this.speed / 20) * 2.8 * dt;
+    if (brake) {
+      this.speed = this.speed > 0.25 ? Math.max(0, this.speed - 25 * dt) : this.speed - 8 * dt;
+    } else if (throttle) {
+      this.speed += 10 * dt;
+    } else {
+      this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), (0.35 + Math.abs(this.speed) * 0.12) * dt);
+    }
+    this.speed = THREE.MathUtils.clamp(this.speed, -18, 300 / 3.6);
+    const speedFraction = Math.min(1, Math.abs(this.speed) / 8);
+    const steeringRate = 0.9 * (1 - 0.5 * Math.min(1, Math.abs(this.speed) / (300 / 3.6)));
+    this.yaw += steering * Math.sign(this.speed) * speedFraction * steeringRate * dt;
 
     const direction = new THREE.Vector3(-Math.sin(this.yaw), 0, Math.cos(this.yaw));
     this.pos.addScaledVector(direction, this.speed * dt);
     const surface = track.constrainVehicle(this.pos);
     if (surface.onTrack) {
-      if (surface.hitBarrier) this.speed *= 0.58;
       this.pos.y += (surface.y - this.pos.y) * Math.min(1, dt * 18);
     } else {
       this.pos.y = Math.max(-30, this.pos.y - 15 * dt);
@@ -137,5 +212,42 @@ export class Vehicle {
     }
     this.group.position.copy(this.pos);
     this.group.rotation.y = -this.yaw;
+    this.group.updateMatrixWorld(true);
+    this.updateSkids(dt, controls);
+  }
+
+  updateSkids(dt, controls) {
+    const drifting = Math.abs(this.speed) > 9 &&
+      (controls.brake || ((controls.left || controls.right) && Math.abs(this.speed) > 20));
+    if (!drifting) {
+      this.skidPrevious = [null, null];
+      this.skidTimer = 0;
+      return;
+    }
+    this.skidTimer += dt;
+    if (this.skidTimer < 0.045) return;
+    this.skidTimer %= 0.045;
+    const wheelX = (this.appearance.bodyStyle === 'wide' ? 3.35 :
+      this.appearance.bodyStyle === 'arrow' ? 2.35 : 2.7) / 2 - 0.12;
+    for (let side = 0; side < 2; side++) {
+      const point = this.group.localToWorld(new THREE.Vector3(side === 0 ? -wheelX : wheelX, 0.04, -1.45));
+      const previous = this.skidPrevious[side];
+      this.skidPrevious[side] = point.clone();
+      if (!previous) continue;
+      const data = this.skidGeometries[side];
+      const segment = this.skidSegments[side] % this.maxSkidSegments;
+      const offset = segment * 6;
+      data.attribute.array.set([previous.x, previous.y, previous.z, point.x, point.y, point.z], offset);
+      data.attribute.needsUpdate = true;
+      this.skidSegments[side] = Math.min(this.skidSegments[side] + 1, this.maxSkidSegments);
+      data.geometry.setDrawRange(0, this.skidSegments[side] * 2);
+    }
+  }
+
+  clearSkids() {
+    this.skidPrevious = [null, null];
+    this.skidTimer = 0;
+    this.skidSegments = [0, 0];
+    for (const data of this.skidGeometries) data.geometry.setDrawRange(0, 0);
   }
 }

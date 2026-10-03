@@ -3,8 +3,8 @@ import { Track } from './track.js';
 import { Vehicle } from './vehicle.js';
 import { Cam } from './camera.js';
 import {
-  settings, saveSettings, vehicle, saveVehicle, scores, score, isTopHundred,
-  playerName, savePlayerName, custom, saveCustom, savedTracks, saveTrack, reset
+  settings, saveSettings, vehicle, saveVehicle, scores, score,
+  custom, saveCustom, customMountain, saveCustomMountain, savedTracks, saveTrack, reset
 } from './storage.js';
 
 const $ = x => document.getElementById(x);
@@ -13,13 +13,15 @@ const tracks = [
     id: 'mountain',
     name: 'Mountain Run',
     desc: 'Technical starter circuit',
-    p: ['start', 'straight', 'straight', 'curveRight', 'straight', 'checkpoint', 'ramp', 'straight', 'curveLeft', 'boost', 'checkpoint', 'curveLeft', 'straight', 'bankRight', 'straight', 'curveRight', 'finish']
+    mountain: 'everfrost',
+    p: ['start', 'straight', 'straight', 'curveRight', 'straight', 'checkpoint', 'ramp', 'straight', 'curveLeft', 'rampDown', 'checkpoint', 'curveLeft', 'straight', 'bankRight', 'straight', 'curveRight', 'finish']
   },
   {
     id: 'speed',
     name: 'Speed Circuit',
     desc: 'High speed test track',
-    p: ['start', 'straight', 'boost', 'straight', 'curveLeft', 'checkpoint', 'straight', 'boost', 'curveLeft', 'straight', 'checkpoint', 'ramp', 'straight', 'curveRight', 'boost', 'straight', 'curveRight', 'finish']
+    mountain: 'glacier',
+    p: ['start', 'straight', 'straight', 'curveLeft', 'checkpoint', 'ramp', 'straight', 'curveRight', 'rampDown', 'straight', 'checkpoint', 'curveRight', 'straight', 'bankLeft', 'straight', 'curveLeft', 'finish']
   }
 ];
 
@@ -38,8 +40,9 @@ let S = settings(),
   ci = 0,
   last = performance.now(),
   entries = custom(),
-  preview = null,
-  rot = 0,
+  selectedMountain = customMountain(),
+  ghostTrack = null,
+  selectedIndex = null,
   selectedPiece = null,
   editingTrackId = null,
   countdownTimer = null,
@@ -112,6 +115,7 @@ function focusBuilder() {
 function setEditorMode(mode) {
   editorMode = mode;
   track.group.visible = mode !== 'vehicle';
+  if (ghostTrack) ghostTrack.group.visible = mode === 'builder' && selectedPiece !== null;
   car.group.visible = mode !== 'builder';
   showroom.visible = mode === 'vehicle';
   if (mode === 'builder') focusBuilder();
@@ -125,11 +129,15 @@ function setEditorMode(mode) {
 }
 
 function bindEditorControls(canvas) {
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
   canvas.addEventListener('pointerdown', event => {
     if (editorMode !== 'builder' && editorMode !== 'vehicle') return;
     orbit.dragging = true;
     orbit.lastX = event.clientX;
     orbit.lastY = event.clientY;
+    orbit.pointerDownX = event.clientX;
+    orbit.pointerDownY = event.clientY;
     canvas.setPointerCapture(event.pointerId);
   });
   canvas.addEventListener('pointermove', event => {
@@ -152,6 +160,21 @@ function bindEditorControls(canvas) {
   canvas.addEventListener('pointerup', event => {
     orbit.dragging = false;
     if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+    if (editorMode === 'builder' && Math.hypot(event.clientX - orbit.pointerDownX, event.clientY - orbit.pointerDownY) < 5) {
+      const bounds = canvas.getBoundingClientRect();
+      pointer.set(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1
+      );
+      raycaster.setFromCamera(pointer, camera);
+      const hit = raycaster.intersectObjects(track.group.children, true)
+        .find(item => Number.isInteger(item.object.userData.trackPieceIndex));
+      if (hit) selectTrackPiece(hit.object.userData.trackPieceIndex);
+      else if (selectedIndex !== null) {
+        selectedIndex = null;
+        renderPreview();
+      }
+    }
   });
   canvas.addEventListener('wheel', event => {
     if (editorMode !== 'builder' && editorMode !== 'vehicle') return;
@@ -188,6 +211,12 @@ function init(id) {
   scene.add(l);
 
   track = new Track(scene);
+  ghostTrack = new Track(scene);
+  ghostTrack.barrierMaterial.transparent = true;
+  ghostTrack.barrierMaterial.opacity = 0.4;
+  ghostTrack.barrierMaterial.depthWrite = false;
+  ghostTrack.barrierMaterial.needsUpdate = true;
+  ghostTrack.group.visible = false;
   showroom = new THREE.Group();
   const platform = new THREE.Mesh(
     new THREE.CylinderGeometry(8, 8, 0.35, 64),
@@ -211,7 +240,7 @@ function race(t) {
   track.group.visible = true;
   car.group.visible = true;
   showroom.visible = false;
-  track.build(t.p);
+  track.build(t.p, t.mountain || 'everfrost');
   car.setAppearance(appearance);
   c = { throttle: false, brake: false, left: false, right: false };
   let sp = track.getSpawn();
@@ -221,6 +250,9 @@ function race(t) {
   ci = 0;
   finished = false;
   running = false;
+  resultTime = null;
+  $('time').textContent = fmt(0);
+  $('finish').classList.add('hidden');
   ['menu', 'tracksScreen', 'leaderScreen', 'builderScreen', 'vehicleScreen', 'settingsScreen'].forEach(x => $(x).classList.add('hidden'));
   $('game').classList.remove('hidden');
   $('gameTrack').textContent = t.name;
@@ -253,38 +285,13 @@ function finish() {
   $('time').textContent = fmt(resultTime);
   $('finish').textContent = `FINISH  ${fmt(resultTime)}`;
   $('finish').classList.remove('hidden');
-  if (isTopHundred(active.id, resultTime)) {
-    $('usernameInput').value = playerName() || 'Racer';
-    $('usernameError').textContent = '';
-    $('usernameDialog').showModal();
-  } else {
-    recordResult(playerName() || 'Racer');
-  }
+  recordResult();
 }
 
-function recordResult(name) {
-  const results = score(active.id, resultTime, name);
+function recordResult() {
+  const results = score(active.id, resultTime);
   $('best').textContent = fmt(results[0].time);
 }
-
-$('usernameForm').addEventListener('submit', event => {
-  event.preventDefault();
-  const name = $('usernameInput').value.trim().replace(/\s+/g, ' ');
-  const normalizedName = name.toLowerCase().replace(/[^a-z0-9]/g, '');
-  const inappropriate = ['fuck', 'shit', 'bitch', 'asshole', 'bastard', 'dick', 'piss']
-    .some(word => normalizedName.includes(word));
-  if (!/^[\p{L}\p{N}_-]+(?: [\p{L}\p{N}_-]+)*$/u.test(name) || name.length < 3 || name.length > 16 || inappropriate) {
-    $('usernameError').textContent = 'Use a clean name with 3–16 letters, numbers, spaces, _ or -.';
-    return;
-  }
-  savePlayerName(name);
-  $('usernameDialog').close();
-  recordResult(name);
-});
-$('usernameDialog').addEventListener('cancel', event => event.preventDefault());
-$('usernameDialog').addEventListener('click', event => {
-  if (event.target === $('usernameDialog')) event.preventDefault();
-});
 
 function loop(now) {
   requestAnimationFrame(loop);
@@ -295,12 +302,10 @@ function loop(now) {
     car.update(dt, c, track);
     $('time').textContent = fmt(performance.now() - start);
 
-    if (S.showSpeed) $('speed').textContent = `${Math.round(car.speed * 3.6)} KM/H`;
-
     if (ci < track.checkpoints.length) {
       let cp = track.checkpoints[ci];
       let d2d = Math.hypot(car.pos.x - cp.x, car.pos.z - cp.z);
-      if (d2d < 7 && Math.abs(car.pos.y - cp.y) < 10) {
+      if (d2d < 7 && Math.abs(car.pos.y - cp.y) < 3.5) {
         ci++;
         $('checkpoint').textContent = `CHECKPOINT ${ci}/${track.checkpoints.length}`;
       }
@@ -315,6 +320,11 @@ function loop(now) {
     follow.update(car, dt);
   }
 
+  $('speed').classList.toggle('hidden', !S.showSpeed);
+  if (car && S.showSpeed) {
+    const speed = Math.abs(car.speed) * (S.speedUnit === 'mph' ? 2.236936 : 3.6);
+    $('speed').textContent = `${car.speed < -0.1 ? 'R ' : ''}${Math.round(speed)} ${S.speedUnit.toUpperCase()}`;
+  }
   if (renderer) renderer.render(scene, camera);
 }
 
@@ -369,57 +379,89 @@ function renderLeader(t) {
   $('leaderName').textContent = t.name.toUpperCase();
   let b = $('leaderRows');
   b.innerHTML = '';
-  let a = scores(t.id);
-  if (!a.length) a = [{ name: 'NO TIMES YET', time: Infinity }];
+  const a = scores(t.id);
+  if (!a.length) {
+    const empty = document.createElement('p');
+    empty.className = 'muted';
+    empty.textContent = 'NO TIMES YET';
+    b.appendChild(empty);
+    return;
+  }
   a.forEach((x, i) => {
     let d = document.createElement('div');
     d.className = 'leader';
     const rank = document.createElement('span');
     rank.textContent = String(i + 1);
-    const name = document.createElement('span');
-    name.textContent = x.name || 'RACER';
     const time = document.createElement('span');
     time.textContent = fmt(x.time);
-    d.append(rank, name, time);
+    d.append(rank, time);
     b.appendChild(d);
   });
 }
 
 function clearPreview() {
-  if (!preview) return;
-  scene.remove(preview);
-  preview.geometry.dispose();
-  preview.material.dispose();
-  preview = null;
+  if (!ghostTrack) return;
+  ghostTrack.clear();
+  ghostTrack.group.visible = false;
 }
 
 function rebuild() {
-  track.build(entries);
+  track.build(entries, selectedMountain);
   clearPreview();
+  if (selectedIndex !== null && selectedIndex >= entries.length) selectedIndex = null;
   saveCustom(entries);
-  $('buildStatus').textContent = `${entries.length} pieces${selectedPiece ? ` - ${selectedPiece} selected` : ''}`;
+  saveCustomMountain(selectedMountain);
+  $('buildStatus').textContent = `${entries.length} pieces${selectedIndex !== null ? ` - piece ${selectedIndex + 1} selected` : ''}`;
   if (selectedPiece) renderPreview();
 }
 
 function renderPreview() {
   clearPreview();
-  const lastPiece = track.p.at(-1);
-  const startPoint = lastPiece ? lastPiece.end.clone() : track.spawn.clone();
-  const yaw = (lastPiece ? lastPiece.endYaw : 0) + rot;
-  let geo = new THREE.BoxGeometry(12, 0.5, 28);
-  let mat = new THREE.MeshStandardMaterial({ color: 0x32d583, transparent: true, opacity: 0.45 });
-  preview = new THREE.Mesh(geo, mat);
-  const forward = new THREE.Vector3(-Math.sin(yaw), 0, Math.cos(yaw));
-  preview.position.copy(startPoint).addScaledVector(forward, 14);
-  preview.position.y += startPoint.y;
-  preview.rotation.y = -yaw;
-  scene.add(preview);
-  $('buildStatus').textContent = `Preview ${selectedPiece}. ${entries.length} pieces placed. Q/E rotate, Enter place.`;
+  const basePiece = selectedIndex === null ? track.p.at(-1) : track.p[selectedIndex - 1];
+  const startPoint = selectedIndex === null
+    ? (basePiece ? basePiece.end.clone() : track.spawn.clone())
+    : (track.p[selectedIndex]?.start.clone() || track.spawn.clone());
+  const yaw = selectedIndex === null
+    ? (basePiece ? basePiece.endYaw : 0)
+    : (track.p[selectedIndex]?.yaw || 0);
+  ghostTrack.spawn.copy(startPoint);
+  ghostTrack.mountainId = track.mountainId;
+  ghostTrack.add(selectedPiece, yaw);
+  ghostTrack.group.traverse(object => {
+    if (!object.isMesh) return;
+    const materials = Array.isArray(object.material) ? object.material : [object.material];
+    materials.forEach(material => {
+      material.transparent = true;
+      material.opacity = 0.4;
+      material.depthWrite = false;
+      material.needsUpdate = true;
+    });
+  });
+  ghostTrack.group.visible = true;
+  const end = ghostTrack.p.at(-1).end;
+  orbit.target.copy(startPoint).add(end).multiplyScalar(0.5);
+  orbit.target.y = Math.max(orbit.target.y, 0);
+  updateEditorCamera();
+  $('buildStatus').textContent = selectedIndex === null
+    ? `Ghost preview: ${selectedPiece}. Click PLACE PIECE to add it.`
+    : `Editing piece ${selectedIndex + 1}: previewing ${selectedPiece}. Update or delete the selected piece.`;
 }
 
 function pv(type) {
   selectedPiece = type;
-  rot = 0;
+  document.querySelectorAll('[data-piece]').forEach(button => {
+    button.classList.toggle('selected', button.dataset.piece === selectedPiece);
+  });
+  renderPreview();
+}
+
+function selectTrackPiece(index) {
+  if (!entries[index]) return;
+  selectedIndex = index;
+  selectedPiece = entries[index].type;
+  document.querySelectorAll('[data-piece]').forEach(button => {
+    button.classList.toggle('selected', button.dataset.piece === selectedPiece);
+  });
   renderPreview();
 }
 
@@ -427,8 +469,70 @@ function makePieceKey() {
   return `piece-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function exportTrackCode() {
+  const payload = JSON.stringify({
+    mountain: selectedMountain,
+    pieces: entries.map(piece => piece.type)
+  });
+  $('trackCode').value = `APX2-${btoa(payload).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')}`;
+  $('buildStatus').textContent = 'Encoded track code exported with its mountain and exact piece sequence.';
+}
+
+function importTrackCode() {
+  const code = $('trackCode').value.trim();
+  const allowed = new Set(['start', 'straight', 'curveLeft', 'curveRight', 'ramp', 'rampDown', 'bankLeft', 'bankRight', 'checkpoint', 'finish']);
+  let mountain = 'everfrost';
+  let types = [];
+  if (code.startsWith('APX2-')) {
+    const encoded = code.slice(5);
+    if (!/^[A-Za-z0-9_-]+$/.test(encoded)) {
+      $('buildStatus').textContent = 'Invalid encoded track code.';
+      return;
+    }
+    try {
+      const payload = JSON.parse(atob(encoded.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - encoded.length % 4) % 4)));
+      mountain = payload?.mountain;
+      types = payload?.pieces;
+    } catch {
+      $('buildStatus').textContent = 'Invalid encoded track code.';
+      return;
+    }
+  } else {
+    const match = /^APEX(1|2)\|(.+)$/.exec(code);
+    if (match?.[1] === '2') {
+      const divider = match[2].indexOf('|');
+      mountain = divider < 0 ? '' : match[2].slice(0, divider);
+      types = divider < 0 ? [] : match[2].slice(divider + 1).split(',');
+    } else if (match?.[1] === '1') {
+      types = match[2].split(',');
+    }
+  }
+  const mountains = new Set(['everfrost', 'glacier', 'whitefang', 'stormpeak']);
+  if (!mountains.has(mountain) || !Array.isArray(types) || !types.length ||
+      types.some(type => !allowed.has(type)) ||
+      types[0] !== 'start' || types.filter(type => type === 'start').length !== 1 ||
+      types.filter(type => type === 'finish').length > 1 ||
+      (types.includes('finish') && types.at(-1) !== 'finish')) {
+    $('buildStatus').textContent = 'Invalid track code. Export an APX2 code or use an older APEX code with START first and at most one FINISH last.';
+    return;
+  }
+  selectedMountain = mountain;
+  $('mountain').value = selectedMountain;
+  entries = types.map(type => ({ key: makePieceKey(), type, rotation: 0 }));
+  selectedIndex = null;
+  selectedPiece = null;
+  document.querySelectorAll('[data-piece]').forEach(button => button.classList.remove('selected'));
+  rebuild();
+  focusBuilder();
+  $('buildStatus').textContent = 'Track code loaded.';
+}
+
 function placePiece() {
   if (!selectedPiece) return;
+  if (selectedIndex !== null) {
+    $('buildStatus').textContent = `Piece ${selectedIndex + 1} is selected. Update it or click empty space to place a new piece.`;
+    return;
+  }
   if (entries.length === 0 && selectedPiece !== 'start') {
     $('buildStatus').textContent = 'Place the START piece first.';
     return;
@@ -445,29 +549,66 @@ function placePiece() {
     $('buildStatus').textContent = 'A track can only have one FINISH piece.';
     return;
   }
-  entries.push({ key: makePieceKey(), type: selectedPiece, rotation: rot });
-  rot = 0;
+  entries.push({ key: makePieceKey(), type: selectedPiece, rotation: 0 });
+  rebuild();
+}
+
+function updateSelectedPiece() {
+  if (selectedIndex === null || !selectedPiece) return;
+  if (selectedIndex === 0 && selectedPiece !== 'start') {
+    $('buildStatus').textContent = 'The first piece must remain START.';
+    return;
+  }
+  if (selectedIndex > 0 && selectedPiece === 'start') {
+    $('buildStatus').textContent = 'START can only be the first piece.';
+    return;
+  }
+  if (selectedPiece === 'finish' && selectedIndex !== entries.length - 1) {
+    $('buildStatus').textContent = 'FINISH must be the last piece.';
+    return;
+  }
+  if (selectedPiece === 'finish' &&
+      entries.some((piece, index) => index !== selectedIndex && piece.type === 'finish')) {
+    $('buildStatus').textContent = 'A track can only have one FINISH piece.';
+    return;
+  }
+  entries[selectedIndex] = { ...entries[selectedIndex], type: selectedPiece, rotation: 0 };
+  rebuild();
+}
+
+function deleteSelectedPiece() {
+  if (selectedIndex === null) return;
+  if (selectedIndex === 0) {
+    $('buildStatus').textContent = 'The START piece cannot be deleted.';
+    return;
+  }
+  entries.splice(selectedIndex, 1);
+  selectedIndex = null;
+  selectedPiece = null;
   rebuild();
 }
 
 function openBuilder(saved = null) {
   init('builderView');
   editingTrackId = saved?.id || null;
+  selectedMountain = saved?.mountain || customMountain();
+  $('mountain').value = selectedMountain;
   entries = (saved ? saved.pieces : custom()).map(piece => {
-    if (typeof piece === 'string') return { key: makePieceKey(), type: piece, rotation: 0 };
-    return { ...piece, key: piece.key || makePieceKey() };
+    if (typeof piece === 'string') return { key: makePieceKey(), type: piece === 'boost' ? 'straight' : piece, rotation: 0 };
+    return { ...piece, type: piece.type === 'boost' ? 'straight' : piece.type, rotation: 0, key: piece.key || makePieceKey() };
   });
   if (entries[0]?.type !== 'start') {
     entries.unshift({ key: makePieceKey(), type: 'start', rotation: 0 });
   }
   $('trackName').value = saved?.name || '';
   selectedPiece = null;
-  rot = 0;
+  selectedIndex = null;
   car.group.visible = false;
   track.group.visible = true;
   showroom.visible = false;
   editorMode = 'builder';
   rebuild();
+  document.querySelectorAll('[data-piece]').forEach(button => button.classList.remove('selected'));
   focusBuilder();
   show('builderScreen');
 }
@@ -519,6 +660,7 @@ $('settings').onclick = () => {
   $('camDistance').value = S.cameraDistance;
   $('camHeight').value = S.cameraHeight;
   $('showSpeed').checked = S.showSpeed;
+  $('speedUnit').value = S.speedUnit;
 };
 
 document.querySelectorAll('[data-back]').forEach(b => (b.onclick = () => show(b.dataset.back)));
@@ -528,12 +670,26 @@ document.querySelectorAll('[data-piece]').forEach(b => (b.onclick = () => {
 }));
 
 $('placePiece').onclick = placePiece;
+$('updatePiece').onclick = updateSelectedPiece;
+$('deletePiece').onclick = deleteSelectedPiece;
+$('mountain').onchange = event => {
+  selectedMountain = event.target.value;
+  saveCustomMountain(selectedMountain);
+  rebuild();
+  focusBuilder();
+};
+$('exportTrack').onclick = exportTrackCode;
+$('importTrack').onclick = importTrackCode;
 $('undo').onclick = () => {
   entries.pop();
+  selectedIndex = null;
   rebuild();
 };
 $('clear').onclick = () => {
   entries = [];
+  selectedIndex = null;
+  selectedPiece = null;
+  document.querySelectorAll('[data-piece]').forEach(button => button.classList.remove('selected'));
   rebuild();
 };
 $('test').onclick = () => {
@@ -542,7 +698,12 @@ $('test').onclick = () => {
     return;
   }
   clearPreview();
-  race({ id: editingTrackId || 'custom-preview', name: $('trackName').value.trim() || 'Custom Track', p: entries });
+  race({
+    id: editingTrackId || 'custom-preview',
+    name: $('trackName').value.trim() || 'Custom Track',
+    p: entries,
+    mountain: selectedMountain
+  });
 };
 $('saveTrack').onclick = () => {
   if (entries.length < 3 || entries[0]?.type !== 'start' || entries.at(-1)?.type !== 'finish') {
@@ -551,7 +712,7 @@ $('saveTrack').onclick = () => {
   }
   const name = $('trackName').value.trim() || 'My Track';
   editingTrackId ||= `track-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  saveTrack({ id: editingTrackId, name, pieces: entries });
+  saveTrack({ id: editingTrackId, name, pieces: entries, mountain: selectedMountain });
   $('buildStatus').textContent = `"${name}" saved. Track edits are also saved as you build.`;
 };
 $('saveVehicle').onclick = () => {
@@ -578,6 +739,10 @@ $('camHeight').oninput = e => {   S.cameraHeight = +e.target.value;   saveSettin
   S.showSpeed = e.target.checked;
   saveSettings(S);
 };
+$('speedUnit').onchange = e => {
+  S.speedUnit = e.target.value;
+  saveSettings(S);
+};
 $('reset').onclick = () => {
   if (confirm('Reset all Apex local data?')) {
     reset();
@@ -599,10 +764,6 @@ addEventListener('keydown', e => {
   const target = e.target instanceof Element ? e.target : null;
   const isFormControl = target?.closest('input, select, textarea');
   if (!$('builderScreen').classList.contains('hidden') && !isFormControl) {
-    if (k === 'q' || k === 'e') {
-      rot += k === 'q' ? -Math.PI / 12 : Math.PI / 12;
-      if (selectedPiece) renderPreview();
-    }
     if (e.key === 'Enter' && (!target?.closest('button') || target.closest('[data-piece]'))) {
       e.preventDefault();
       placePiece();
@@ -613,6 +774,18 @@ addEventListener('keydown', e => {
     }
   }
   if (!$('game').classList.contains('hidden')) {
+    if (!isFormControl && !e.repeat && k === 'r' && active) {
+      race(active);
+      return;
+    }
+    if (!isFormControl && !e.repeat && k === 't' && active && running) {
+      const point = ci > 0 ? track.checkpoints[ci - 1] : track.getSpawn();
+      const position = ci > 0 ? new THREE.Vector3(point.x, point.y, point.z) : point.position;
+      car.reset(position, point.yaw);
+      c = { throttle: false, brake: false, left: false, right: false };
+      follow.update(car, 1);
+      return;
+    }
     if (e.key === 'ArrowUp' || k === 'w') c.throttle = true;
     if (e.key === 'ArrowDown' || k === 's') c.brake = true;
     if (e.key === 'ArrowLeft' || k === 'a') c.left = true;

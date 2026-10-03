@@ -59,22 +59,35 @@
       <div class="builder">
         <div id="builderView"></div>
         <aside>
-          <p class="editor-help">Place START first and FINISH last. Drag to orbit, scroll to zoom, Shift-drag to pan. Choose a piece and place it. Q/E rotate; Z undo.</p>
+          <p class="editor-help">Place START first and FINISH last. Drag to orbit, scroll to zoom, Shift-drag to pan. Click a piece to edit or delete it; click empty space to deselect and place a new piece. Turns are fixed 90-degree curves.</p>
+          <label class="mountain-choice">MOUNTAIN
+            <select id="mountain">
+              <option value="everfrost">EVERFROST PEAK</option>
+              <option value="glacier">GLACIER RIDGE</option>
+              <option value="whitefang">WHITEFANG TWIN PEAKS</option>
+              <option value="stormpeak">STORMPEAK RANGE</option>
+            </select>
+          </label>
           <div id="pieces" class="piecegrid">
             <button data-piece="start">START</button>
             <button data-piece="straight">STRAIGHT</button>
             <button data-piece="curveLeft">LEFT CURVE</button>
             <button data-piece="curveRight">RIGHT CURVE</button>
             <button data-piece="ramp">RAMP</button>
-            <button data-piece="boost">BOOST</button>
+            <button data-piece="rampDown">DOWN RAMP</button>
             <button data-piece="bankLeft">LEFT BANK</button>
             <button data-piece="bankRight">RIGHT BANK</button>
             <button data-piece="checkpoint">CHECKPOINT</button>
             <button data-piece="finish">FINISH</button>
           </div>
           <button id="placePiece">PLACE PIECE</button>
-          <p id="buildStatus">Select a piece, then click PLACE PIECE or press Enter. Q/E rotate; Z undo.</p>
+          <button id="updatePiece">UPDATE PIECE</button>
+          <button id="deletePiece">DELETE SELECTED PIECE</button>
+          <p id="buildStatus">Select a piece, then click PLACE PIECE or press Enter. Click a placed piece to edit or delete it.</p>
           <label class="track-name">TRACK NAME<input id="trackName" type="text" maxlength="40" placeholder="My Track"></label>
+          <label class="track-name">TRACK CODE<textarea id="trackCode" rows="4" placeholder="APX2-encoded-track-string"></textarea></label>
+          <button id="exportTrack">EXPORT TRACK CODE</button>
+          <button id="importTrack">LOAD TRACK CODE</button>
           <button id="undo">UNDO</button>
           <button id="clear">CLEAR</button>
           <button id="test">TEST TRACK</button>
@@ -138,6 +151,12 @@
       <label>CAMERA DISTANCE<input id="camDistance" type="range" min="6" max="18"></label>
       <label>CAMERA HEIGHT<input id="camHeight" type="range" min="2" max="10"></label>
       <label class="check">SHOW SPEED<input id="showSpeed" type="checkbox"></label>
+      <label>SPEED UNITS
+        <select id="speedUnit">
+          <option value="kph">KPH</option>
+          <option value="mph">MPH</option>
+        </select>
+      </label>
       <button id="reset">RESET LOCAL DATA</button>
     </div>
   </section>
@@ -153,21 +172,10 @@
     <div id="finish" class="hidden"></div>
     <div class="bottom">
       <span id="checkpoint">CHECKPOINT 0/0</span>
+      <span class="drive-hint">DOWN/S BRAKE · REVERSE AFTER STOP · R RESTART · T CHECKPOINT</span>
       <button id="hudMenu">MENU</button>
     </div>
   </main>
-
-  <dialog id="usernameDialog">
-    <form id="usernameForm">
-      <h2>New top 100 time!</h2>
-      <p>Your time made this browser’s leaderboard. Choose a display name.</p>
-      <label class="track-name">USERNAME<input id="usernameInput" type="text" maxlength="16" autocomplete="nickname" required></label>
-      <p id="usernameError" class="form-error" aria-live="polite"></p>
-      <div class="dialog-actions">
-        <button type="submit">SAVE TIME</button>
-      </div>
-    </form>
-  </dialog>
 
   <script type="module" src="./src/main.js"></script>
 </body>

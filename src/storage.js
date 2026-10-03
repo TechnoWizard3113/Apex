@@ -1,6 +1,6 @@
 const P = 'apex-v2-';
 const d = {
-  settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true },
+  settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true, speedUnit: 'kph' },
   vehicle: {
     bodyStyle: 'apex',
     profiles: {
@@ -25,6 +25,7 @@ const w = (k, v) => localStorage.setItem(P + k, JSON.stringify(v));
 export const settings = () => {
   const value = { ...d.settings, ...r('settings', {}) };
   delete value.showCheckpoints;
+  value.speedUnit = value.speedUnit === 'mph' ? 'mph' : 'kph';
   return value;
 };
 export const saveSettings = x => w('settings', x);
@@ -48,21 +49,20 @@ export const vehicle = () => {
 };
 export const saveVehicle = x => w('vehicle', x);
 export const scores = id => r('scores-' + id, []);
-export const isTopHundred = (id, time) => {
-  const entries = scores(id);
-  return entries.length < 100 || time <= entries[99].time;
-};
 
-export const score = (id, t, name) => {
-  let a = [...scores(id), { name, time: t }].sort((a, b) => a.time - b.time).slice(0, 100);
+export const score = (id, t) => {
+  let a = [...scores(id), { time: t }].sort((a, b) => a.time - b.time).slice(0, 100);
   w('scores-' + id, a);
   return a;
 };
-export const playerName = () => r('player-name', '');
-export const savePlayerName = name => w('player-name', name);
 
 export const custom = () => r('custom', []);
 export const saveCustom = x => w('custom', x);
+export const customMountain = () => {
+  const mountain = r('custom-mountain', 'everfrost');
+  return ['everfrost', 'glacier', 'whitefang', 'stormpeak'].includes(mountain) ? mountain : 'everfrost';
+};
+export const saveCustomMountain = mountain => w('custom-mountain', mountain);
 export const savedTracks = () => {
   const tracks = r('tracks', null);
   if (tracks !== null) return tracks;
