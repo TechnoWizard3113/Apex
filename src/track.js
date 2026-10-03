@@ -4,9 +4,10 @@ const WIDTH = 12;
 const LENGTH = 28;
 const ROAD_THICKNESS = 0.8;
 const START_OFFSET = 8;
-const ROAD_CLEARANCE = 1.1;
+const ROAD_CLEARANCE = 1;
 const RADIUS = 24;
-const CURVE_STEPS = 16;
+const CURVE_STEPS = 48;
+const STRAIGHT_STEPS = 16;
 const BARRIER_HEIGHT = 1.1;
 const BANK_ANGLE = 0.18;
 const PIECES = new Set([
@@ -16,31 +17,34 @@ const PIECES = new Set([
 const MOUNTAINS = new Set(['everfrost', 'glacier', 'whitefang', 'stormpeak']);
 
 function peak(x, z, centerX, centerZ, height, radiusX, radiusZ) {
-  const dx = (x - centerX) / radiusX;
-  const dz = (z - centerZ) / radiusZ;
-  return height * Math.exp(-(dx * dx + dz * dz));
+  const dx = Math.abs((x - centerX) / radiusX);
+  const dz = Math.abs((z - centerZ) / radiusZ);
+  return height * Math.exp(-(dx ** 1.45 + dz ** 1.45));
 }
 
 function mountainHeight(id, x, z) {
+  let height;
   if (id === 'glacier') {
-    const ridge = 76 * Math.exp(-((x / 190) ** 2 + (z / 520) ** 2));
-    return ridge + peak(x, z, -190, 190, 30, 160, 230) + peak(x, z, 205, -260, 34, 150, 210);
-  }
-  if (id === 'whitefang') {
-    return peak(x, z, -105, -25, 96, 165, 205) +
+    const ridge = 76 * Math.exp(-(Math.abs(x / 190) ** 1.35 + Math.abs(z / 520) ** 1.55));
+    height = ridge + peak(x, z, -190, 190, 30, 160, 230) + peak(x, z, 205, -260, 34, 150, 210);
+  } else if (id === 'whitefang') {
+    height = peak(x, z, -105, -25, 96, 165, 205) +
       peak(x, z, 112, 70, 88, 150, 190) +
       peak(x, z, 10, 270, 34, 220, 180);
-  }
-  if (id === 'stormpeak') {
+  } else if (id === 'stormpeak') {
     const ridgeCenter = 105 * Math.sin(z / 230);
     const ridgeX = (x - ridgeCenter) / 145;
-    return 102 * Math.exp(-(ridgeX * ridgeX + (z / 570) ** 2)) +
+    height = 102 * Math.exp(-(Math.abs(ridgeX) ** 1.4 + Math.abs(z / 570) ** 1.6)) +
       peak(x, z, -245, -300, 40, 190, 220) +
       peak(x, z, 245, 320, 36, 180, 230);
+  } else {
+    height = peak(x, z, 0, 0, 112, 235, 270) +
+      peak(x, z, 260, 210, 42, 180, 200) +
+      peak(x, z, -280, -230, 36, 190, 180);
   }
-  return peak(x, z, 0, 0, 112, 235, 270) +
-    peak(x, z, 260, 210, 42, 180, 200) +
-    peak(x, z, -280, -230, 36, 190, 180);
+  const detail = Math.sin(x * 0.026 + z * 0.011) *
+    Math.sin(z * 0.031 - x * 0.009) * 1.8;
+  return Math.max(0, height + detail * Math.min(1, height / 18));
 }
 
 function material(type) {
@@ -59,6 +63,20 @@ function forward(yaw) {
 
 function right(yaw) {
   return new THREE.Vector3(-Math.cos(yaw), 0, -Math.sin(yaw));
+}
+
+function terrainSupport(mountainId, x, z, yaw, bank = 0) {
+  let height = -Infinity;
+  const across = right(yaw);
+  for (let i = 0; i <= 24; i++) {
+    const lateral = -WIDTH / 2 + WIDTH * i / 24;
+    height = Math.max(height, mountainHeight(
+      mountainId,
+      x + across.x * lateral,
+      z + across.z * lateral
+    ) + lateral * Math.tan(bank));
+  }
+  return height;
 }
 
 function stripGeometry(samples) {
@@ -97,6 +115,31 @@ function stripGeometry(samples) {
     last, last + 2, last + 1,
     last + 1, last + 2, last + 3
   );
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+  geometry.setIndex(indices);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+function bandGeometry(samples, startLateral, endLateral, heightOffset = 0.19) {
+  const vertices = [];
+  const indices = [];
+  for (const sample of samples) {
+    const across = right(sample.yaw);
+    const bankSlope = Math.tan(sample.bank);
+    for (const lateral of [startLateral, endLateral]) {
+      vertices.push(
+        sample.position.x + across.x * lateral,
+        sample.position.y - lateral * bankSlope + heightOffset,
+        sample.position.z + across.z * lateral
+      );
+    }
+  }
+  for (let i = 0; i < samples.length - 1; i++) {
+    const a = i * 2;
+    indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
   geometry.setIndex(indices);
@@ -153,8 +196,9 @@ export class Track {
     this.spawn = new THREE.Vector3(0, 0, 0);
     this.finish = this.spawn.clone();
     this.surfaceSegments = [];
+    this.surfaceBuckets = new Map();
     this.mountainId = 'everfrost';
-    this.spawn.y = mountainHeight(this.mountainId, 0, 0) + ROAD_CLEARANCE;
+    this.spawn.y = terrainSupport(this.mountainId, 0, 0, 0) + ROAD_CLEARANCE;
     this.barrierMaterial = new THREE.MeshStandardMaterial({ color: 0x9eabb2, roughness: 0.55 });
   }
 
@@ -172,6 +216,7 @@ export class Track {
     this.p = [];
     this.checkpoints = [];
     this.surfaceSegments = [];
+    this.surfaceBuckets.clear();
     this.finish.copy(this.spawn);
   }
 
@@ -184,8 +229,9 @@ export class Track {
     const previous = this.p.at(-1);
     const start = previous ? previous.end.clone() : this.spawn.clone();
     const yaw = (previous ? previous.endYaw : 0) + rotation;
-    const startOffset = start.y - mountainHeight(this.mountainId, start.x, start.z) - ROAD_CLEARANCE;
     const maxBank = type === 'bankLeft' ? BANK_ANGLE : type === 'bankRight' ? -BANK_ANGLE : 0;
+    const supportAtStart = terrainSupport(this.mountainId, start.x, start.z, yaw);
+    const startOffset = start.y - supportAtStart - ROAD_CLEARANCE;
     const samples = [];
     const end = start.clone();
     let endYaw = yaw;
@@ -197,7 +243,8 @@ export class Track {
         const position = start.clone()
           .addScaledVector(right(yaw), direction * RADIUS * (1 - Math.cos(angle)))
           .addScaledVector(forward(yaw), RADIUS * Math.sin(angle));
-        position.y = mountainHeight(this.mountainId, position.x, position.z) + ROAD_CLEARANCE + startOffset;
+        position.y = terrainSupport(this.mountainId, position.x, position.z, yaw + direction * angle) +
+          ROAD_CLEARANCE + startOffset;
         samples.push({
           position,
           yaw: yaw + direction * angle,
@@ -208,7 +255,7 @@ export class Track {
       endYaw += direction * Math.PI / 2;
     } else {
       const rampHeight = type === 'ramp' ? 9 : type === 'rampDown' ? -9 : 0;
-      const count = 4;
+      const count = STRAIGHT_STEPS * 2;
       for (let i = 0; i <= count; i++) {
         const fraction = i / count;
         const bank = maxBank * Math.sin(Math.PI * fraction);
@@ -220,8 +267,11 @@ export class Track {
           bank
         });
         const position = samples.at(-1).position;
-        position.y = mountainHeight(this.mountainId, position.x, position.z) +
-          ROAD_CLEARANCE + startOffset + rampHeight * fraction;
+        const inheritedOffset = rampHeight ? startOffset * (1 - fraction) : startOffset;
+        const terrainFloor = terrainSupport(this.mountainId, position.x, position.z, yaw, bank) +
+          ROAD_CLEARANCE + inheritedOffset;
+        const rampHeightAtSample = start.y + rampHeight * fraction;
+        position.y = Math.max(terrainFloor, rampHeight ? rampHeightAtSample : terrainFloor);
       }
       end.copy(samples.at(-1).position);
     }
@@ -231,6 +281,39 @@ export class Track {
     mesh.receiveShadow = true;
     mesh.userData.trackPieceIndex = pieceIndex;
     this.group.add(mesh);
+
+    const edgeColor = type === 'checkpoint' ? 0x32d583 :
+      type === 'ramp' || type === 'rampDown' ? 0xffbd55 :
+        type === 'bankLeft' || type === 'bankRight' ? 0x69d2ed :
+          type === 'start' || type === 'finish' ? 0xf3f6f8 : 0xd9e3ed;
+    const edgeMaterial = new THREE.MeshStandardMaterial({
+      color: edgeColor,
+      roughness: 0.62,
+      metalness: 0.08,
+      side: THREE.DoubleSide
+    });
+    for (const [inner, outer] of [
+      [-WIDTH / 2 + 0.42, -WIDTH / 2 + 0.82],
+      [WIDTH / 2 - 0.82, WIDTH / 2 - 0.42]
+    ]) {
+      const edge = new THREE.Mesh(bandGeometry(samples, inner, outer), edgeMaterial);
+      edge.receiveShadow = true;
+      edge.userData.trackPieceIndex = pieceIndex;
+      this.group.add(edge);
+    }
+
+    const laneMaterial = new THREE.MeshStandardMaterial({
+      color: 0xeaf1f5,
+      roughness: 0.65,
+      side: THREE.DoubleSide
+    });
+    for (let i = 0; i < samples.length - 1; i += 6) {
+      const dash = samples.slice(i, Math.min(i + 3, samples.length));
+      if (dash.length < 2) continue;
+      const marking = new THREE.Mesh(bandGeometry(dash, -0.1, 0.1, 0.205), laneMaterial);
+      marking.userData.trackPieceIndex = pieceIndex;
+      this.group.add(marking);
+    }
 
     for (let i = 0; i < samples.length - 1; i++) {
       const first = samples[i];
@@ -295,7 +378,7 @@ export class Track {
     this.clear();
     if (!MOUNTAINS.has(selectedMountain)) throw new Error(`Unknown mountain: ${selectedMountain}`);
     this.mountainId = selectedMountain;
-    this.spawn.set(0, mountainHeight(this.mountainId, 0, 0) + ROAD_CLEARANCE, 0);
+    this.spawn.set(0, terrainSupport(this.mountainId, 0, 0, 0) + ROAD_CLEARANCE, 0);
     this.finish.copy(this.spawn);
     for (const piece of pieces) {
       this.add(typeof piece === 'string' ? piece : piece.type, typeof piece === 'string' ? 0 : piece.rotation || 0);
@@ -305,7 +388,7 @@ export class Track {
 
   addEnvironment() {
     const size = 1800;
-    const divisions = 100;
+    const divisions = 400;
     const step = size / divisions;
     const vertices = [];
     const colors = [];
@@ -313,20 +396,37 @@ export class Track {
     const snow = new THREE.Color(0xe6f1f7);
     const rock = new THREE.Color(0x66717a);
     const tint = new THREE.Color();
+    this.buildSurfaceBuckets(WIDTH / 2 + step * 4);
     for (let row = 0; row <= divisions; row++) {
       const z = -size / 2 + row * step;
       for (let column = 0; column <= divisions; column++) {
         const x = -size / 2 + column * step;
-        const height = mountainHeight(this.mountainId, x, z);
-        const slopeX = (mountainHeight(this.mountainId, x + 4, z) -
-          mountainHeight(this.mountainId, x - 4, z)) / 8;
-        const slopeZ = (mountainHeight(this.mountainId, x, z + 4) -
-          mountainHeight(this.mountainId, x, z - 4)) / 8;
+        let height = mountainHeight(this.mountainId, x, z) - 0.3;
+        const road = this.getTerrainRoadSurface(x, z);
+        if (road && road.distance < WIDTH / 2 + step * 4) {
+          const roadUnderside = road.y - 0.16 - ROAD_THICKNESS - 0.2;
+          const cutRadius = WIDTH / 2 + step * 0.35;
+          if (road.distance <= cutRadius) {
+            height = Math.min(height, roadUnderside);
+          } else {
+            const blend = THREE.MathUtils.clamp(
+              (road.distance - cutRadius) / (step * 2.8),
+              0,
+              1
+            );
+            const smoothBlend = blend * blend * (3 - 2 * blend);
+            height = Math.min(height, roadUnderside + (height - roadUnderside) * smoothBlend);
+          }
+        }
+        const slopeX = (mountainHeight(this.mountainId, x + 2, z) -
+          mountainHeight(this.mountainId, x - 2, z)) / 4;
+        const slopeZ = (mountainHeight(this.mountainId, x, z + 2) -
+          mountainHeight(this.mountainId, x, z - 2)) / 4;
         const steepness = Math.hypot(slopeX, slopeZ);
-        const exposedRock = THREE.MathUtils.clamp((steepness - 0.48) * 1.8, 0, 0.82);
+        const exposedRock = THREE.MathUtils.clamp((steepness - 0.32) * 1.45, 0, 0.9);
         const shade = THREE.MathUtils.clamp(0.94 + height * 0.0007, 0.9, 1);
         tint.copy(snow).lerp(rock, exposedRock).multiplyScalar(shade);
-        vertices.push(x, height - 0.3, z);
+        vertices.push(x, height, z);
         colors.push(tint.r, tint.g, tint.b);
         if (row < divisions && column < divisions) {
           const a = row * (divisions + 1) + column;
@@ -343,10 +443,69 @@ export class Track {
     const terrain = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({
       vertexColors: true,
       roughness: 0.96,
+      flatShading: true,
       side: THREE.DoubleSide
     }));
     terrain.receiveShadow = true;
     this.group.add(terrain);
+    this.addRocks();
+  }
+
+  addRocks() {
+    let seed = [...this.mountainId].reduce((value, character) => value * 31 + character.charCodeAt(0), 17) >>> 0;
+    const random = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0x100000000;
+    };
+    const geometry = new THREE.DodecahedronGeometry(1, 0);
+    const rock = new THREE.MeshStandardMaterial({ color: 0x303943, roughness: 0.94, flatShading: true });
+    const snow = new THREE.MeshStandardMaterial({ color: 0x505b67, roughness: 0.92, flatShading: true });
+    const rockInstances = new THREE.InstancedMesh(geometry, rock, 320);
+    const snowInstances = new THREE.InstancedMesh(geometry, snow, 180);
+    rockInstances.castShadow = true;
+    rockInstances.receiveShadow = true;
+    snowInstances.castShadow = true;
+    snowInstances.receiveShadow = true;
+    const transform = new THREE.Object3D();
+    const up = new THREE.Vector3(0, 1, 0);
+    let rockCount = 0;
+    let snowCount = 0;
+    for (let attempt = 0; attempt < 1100 && (rockCount < rockInstances.count || snowCount < snowInstances.count); attempt++) {
+      const x = (random() - 0.5) * 1250;
+      const z = (random() - 0.5) * 1450;
+      const ground = mountainHeight(this.mountainId, x, z);
+      const slopeX = (mountainHeight(this.mountainId, x + 3, z) - mountainHeight(this.mountainId, x - 3, z)) / 6;
+      const slopeZ = (mountainHeight(this.mountainId, x, z + 3) - mountainHeight(this.mountainId, x, z - 3)) / 6;
+      const steepness = Math.hypot(slopeX, slopeZ);
+      const scale = 1.4 + random() ** 2 * 7;
+      if (ground < 4 || steepness < 0.28 ||
+          (this.getTerrainRoadSurface(x, z)?.distance ?? Infinity) < WIDTH / 2 + 12 + scale * 1.5) continue;
+
+      const normal = new THREE.Vector3(-slopeX, 1, -slopeZ).normalize();
+      transform.position.set(x, ground - 0.1, z);
+      transform.quaternion.setFromUnitVectors(up, normal);
+      transform.quaternion.premultiply(
+        new THREE.Quaternion().setFromAxisAngle(normal, random() * Math.PI * 2)
+      );
+      transform.rotation.x += (random() - 0.5) * 0.15;
+      transform.rotation.z += (random() - 0.5) * 0.15;
+      transform.scale.set(scale, scale * (0.55 + random() * 0.5), scale * (0.7 + random() * 0.5));
+      transform.updateMatrix();
+      if (steepness > 0.85 && rockCount < rockInstances.count) {
+        rockInstances.setMatrixAt(rockCount++, transform.matrix);
+      } else if (snowCount < snowInstances.count) {
+        snowInstances.setMatrixAt(snowCount++, transform.matrix);
+      }
+    }
+    rockInstances.count = rockCount;
+    snowInstances.count = snowCount;
+    rockInstances.instanceMatrix.needsUpdate = true;
+    snowInstances.instanceMatrix.needsUpdate = true;
+    if (rockCount) this.group.add(rockInstances);
+    else rock.dispose();
+    if (snowCount) this.group.add(snowInstances);
+    else snow.dispose();
+    if (!rockCount && !snowCount) geometry.dispose();
   }
 
   getTerrainHeight(x, z) {
@@ -354,8 +513,12 @@ export class Track {
   }
 
   getSurfaceAt(x, z, y = null) {
+    return this.findSurfaceAt(x, z, y, this.surfaceSegments);
+  }
+
+  findSurfaceAt(x, z, y, segments) {
     let nearest = null;
-    for (const segment of this.surfaceSegments) {
+    for (const segment of segments) {
       const dx = segment.end.x - segment.start.x;
       const dz = segment.end.z - segment.start.z;
       const lengthSquared = dx * dx + dz * dz;
@@ -380,10 +543,36 @@ export class Track {
         score,
         lateral,
         y: centerY - lateral * Math.tan(segment.bank) + 0.16,
-        yaw: segment.yaw
+        yaw: segment.yaw,
+        pitch: Math.atan2(segment.end.y - segment.start.y, Math.hypot(dx, dz)),
+        bank: segment.bank
       };
     }
     return nearest;
+  }
+
+  buildSurfaceBuckets(radius) {
+    const cellSize = 32;
+    const buckets = new Map();
+    for (const segment of this.surfaceSegments) {
+      const minX = Math.floor((Math.min(segment.start.x, segment.end.x) - radius) / cellSize);
+      const maxX = Math.floor((Math.max(segment.start.x, segment.end.x) + radius) / cellSize);
+      const minZ = Math.floor((Math.min(segment.start.z, segment.end.z) - radius) / cellSize);
+      const maxZ = Math.floor((Math.max(segment.start.z, segment.end.z) + radius) / cellSize);
+      for (let cellX = minX; cellX <= maxX; cellX++) {
+        for (let cellZ = minZ; cellZ <= maxZ; cellZ++) {
+          const key = `${cellX},${cellZ}`;
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(segment);
+        }
+      }
+    }
+    this.surfaceBuckets = buckets;
+  }
+
+  getTerrainRoadSurface(x, z) {
+    const segments = this.surfaceBuckets.get(`${Math.floor(x / 32)},${Math.floor(z / 32)}`) || [];
+    return this.findSurfaceAt(x, z, null, segments);
   }
 
   constrainVehicle(position) {
@@ -391,7 +580,7 @@ export class Track {
     const groundY = this.getTerrainHeight(position.x, position.z);
     if (!surface || surface.distance > WIDTH / 2 + 5 ||
         Math.abs(groundY - position.y) < Math.abs(surface.y - position.y)) {
-      return { onTrack: true, hitBarrier: false, y: groundY };
+      return { onTrack: true, hitBarrier: false, y: groundY, pitch: 0, bank: 0 };
     }
 
     const maxLateral = WIDTH / 2 - 2;
@@ -406,7 +595,9 @@ export class Track {
     return {
       onTrack: true,
       hitBarrier,
-      y: constrainedSurface?.y ?? surface.y
+      y: constrainedSurface?.y ?? surface.y,
+      pitch: constrainedSurface?.pitch ?? surface.pitch,
+      bank: constrainedSurface?.bank ?? surface.bank
     };
   }
 
@@ -414,7 +605,7 @@ export class Track {
     const yaw = this.p[0]?.yaw || 0;
     const position = this.spawn.clone().addScaledVector(forward(yaw), START_OFFSET);
     const surface = this.getSurfaceAt(position.x, position.z, position.y);
-    if (surface) position.y = surface.y;
+    if (surface) position.y = Math.max(surface.y, this.getTerrainHeight(position.x, position.z) + ROAD_CLEARANCE);
     return { position, yaw };
   }
 }

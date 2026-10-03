@@ -68,6 +68,10 @@
               <option value="stormpeak">STORMPEAK RANGE</option>
             </select>
           </label>
+          <div class="piece-library-heading">
+            <small>PIECE LIBRARY</small>
+            <span>Click a placed piece to edit its shape</span>
+          </div>
           <div id="pieces" class="piecegrid">
             <button data-piece="start">START</button>
             <button data-piece="straight">STRAIGHT</button>
@@ -80,18 +84,22 @@
             <button data-piece="checkpoint">CHECKPOINT</button>
             <button data-piece="finish">FINISH</button>
           </div>
-          <button id="placePiece">PLACE PIECE</button>
-          <button id="updatePiece">UPDATE PIECE</button>
-          <button id="deletePiece">DELETE SELECTED PIECE</button>
-          <p id="buildStatus">Select a piece, then click PLACE PIECE or press Enter. Click a placed piece to edit or delete it.</p>
+          <div class="piece-actions">
+            <button id="placePiece">PLACE</button>
+            <button id="updatePiece">UPDATE</button>
+            <button id="deletePiece">DELETE</button>
+          </div>
+          <p id="buildStatus">Select a piece, then click PLACE or press Enter. Click a placed piece to edit or delete it.</p>
           <label class="track-name">TRACK NAME<input id="trackName" type="text" maxlength="40" placeholder="My Track"></label>
           <label class="track-name">TRACK CODE<textarea id="trackCode" rows="4" placeholder="APX2-encoded-track-string"></textarea></label>
-          <button id="exportTrack">EXPORT TRACK CODE</button>
-          <button id="importTrack">LOAD TRACK CODE</button>
-          <button id="undo">UNDO</button>
-          <button id="clear">CLEAR</button>
-          <button id="test">TEST TRACK</button>
-          <button id="saveTrack">SAVE TRACK</button>
+          <div class="editor-actions">
+            <button id="exportTrack">EXPORT CODE</button>
+            <button id="importTrack">LOAD CODE</button>
+            <button id="undo">UNDO</button>
+            <button id="clear">CLEAR</button>
+            <button id="test">TEST TRACK</button>
+            <button id="saveTrack">SAVE TRACK</button>
+          </div>
         </aside>
       </div>
     </div>
