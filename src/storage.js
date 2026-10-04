@@ -2,12 +2,11 @@ const P = 'apex-v2-';
 const d = {
   settings: { graphics: 'high', cameraDistance: 10, cameraHeight: 5, showSpeed: true, speedUnit: 'kph' },
   vehicle: {
-    bodyStyle: 'apex',
-    profiles: {
-      apex: { bodyColor: '#2f8cff', accentColor: '#ffffff', wheelStyle: 'sport' },
-      wide: { bodyColor: '#ff8d2f', accentColor: '#ffffff', wheelStyle: 'classic' },
-      arrow: { bodyColor: '#ad63ff', accentColor: '#ffffff', wheelStyle: 'dark' }
-    }
+    bodyColor: '#2f8cff',
+    accentColor: '#ffffff',
+    wheelStyle: 'sport',
+    engineStyle: 'v8',
+    exhaustStyle: 'dual'
   }
 };
 
@@ -31,21 +30,20 @@ export const settings = () => {
 export const saveSettings = x => w('settings', x);
 export const vehicle = () => {
   const stored = r('vehicle', {});
-  const profiles = Object.fromEntries(Object.entries(d.vehicle.profiles).map(([style, defaults]) => [
-    style,
-    { ...defaults, ...(stored.profiles?.[style] || {}) }
-  ]));
-  const legacyStyle = Object.hasOwn(profiles, stored.bodyStyle) ? stored.bodyStyle : 'apex';
-  if (stored.bodyColor || stored.accentColor || stored.wheelStyle) {
-    profiles[legacyStyle] = {
-      ...profiles[legacyStyle],
-      bodyColor: stored.bodyColor || profiles[legacyStyle].bodyColor,
-      accentColor: stored.accentColor || profiles[legacyStyle].accentColor,
-      wheelStyle: stored.wheelStyle || profiles[legacyStyle].wheelStyle
-    };
-  }
-  const bodyStyle = Object.hasOwn(profiles, stored.bodyStyle) ? stored.bodyStyle : d.vehicle.bodyStyle;
-  return { bodyStyle, profiles };
+  const legacyStyle = ['apex', 'wide', 'arrow'].includes(stored.bodyStyle) ? stored.bodyStyle : 'apex';
+  const legacyProfile = stored.profiles?.[legacyStyle] || {};
+  const validWheels = ['sport', 'classic', 'dark'];
+  const validEngines = ['v6', 'v8', 'supercharged'];
+  const validExhausts = ['single', 'dual', 'side'];
+  return {
+    bodyColor: stored.bodyColor || legacyProfile.bodyColor || d.vehicle.bodyColor,
+    accentColor: stored.accentColor || legacyProfile.accentColor || d.vehicle.accentColor,
+    wheelStyle: validWheels.includes(stored.wheelStyle)
+      ? stored.wheelStyle
+      : validWheels.includes(legacyProfile.wheelStyle) ? legacyProfile.wheelStyle : d.vehicle.wheelStyle,
+    engineStyle: validEngines.includes(stored.engineStyle) ? stored.engineStyle : d.vehicle.engineStyle,
+    exhaustStyle: validExhausts.includes(stored.exhaustStyle) ? stored.exhaustStyle : d.vehicle.exhaustStyle
+  };
 };
 export const saveVehicle = x => w('vehicle', x);
 export const scores = id => r('scores-' + id, []);

@@ -119,11 +119,18 @@
         <div>
           <label>BODY COLOR<input id="bodyColor" type="color"></label>
           <label>ACCENT COLOR<input id="accentColor" type="color"></label>
-          <label>BODY STYLE
-            <select id="bodyStyle">
-              <option value="apex">APEX</option>
-              <option value="wide">WIDE</option>
-              <option value="arrow">ARROW</option>
+          <label>ENGINE LOOK (COSMETIC)
+            <select id="engineStyle">
+              <option value="v6">V6</option>
+              <option value="v8">V8</option>
+              <option value="supercharged">SUPERCHARGED V8</option>
+            </select>
+          </label>
+          <label>EXHAUST LOOK (COSMETIC)
+            <select id="exhaustStyle">
+              <option value="single">SINGLE</option>
+              <option value="dual">DUAL</option>
+              <option value="side">SIDE PIPES</option>
             </select>
           </label>
           <label>WHEELS
@@ -134,7 +141,7 @@
             </select>
           </label>
           <button id="saveVehicle">SAVE</button>
-          <p id="vehicleStatus" class="editor-help">Drag to orbit the car; scroll to zoom. Each body style keeps its own colors and wheels.</p>
+          <p id="vehicleStatus" class="editor-help">Drag to orbit the Apex car; scroll to zoom. Engine and exhaust choices are visual only and do not affect performance.</p>
         </div>
       </div>
     </div>

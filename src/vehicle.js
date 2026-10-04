@@ -1,5 +1,8 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 
+const WHEELBASE = 2.9;
+const MAX_STEERING_ANGLE = 0.42;
+
 export class Vehicle {
   constructor(scene, appearance) {
     this.scene = scene;
@@ -43,7 +46,6 @@ export class Vehicle {
     });
     this.group.clear();
 
-    const style = this.appearance.bodyStyle;
     const bodyMaterial = new THREE.MeshStandardMaterial({
       color: this.appearance.bodyColor,
       roughness: 0.4,
@@ -72,12 +74,11 @@ export class Vehicle {
       emissive: 0x8f1018,
       emissiveIntensity: 0.8
     });
+    this.tailLightMaterial = tailLightMaterial;
     const hubMaterial = new THREE.MeshStandardMaterial({ color: 0x9aa2a8, metalness: 0.65, roughness: 0.35 });
     const wheelColor = this.appearance.wheelStyle === 'dark' ? 0x111317 :
       this.appearance.wheelStyle === 'classic' ? 0xb7bec3 : 0x252a30;
-    const dimensions = style === 'wide' ? { width: 3.35, height: 0.72, length: 4.8 } :
-      style === 'arrow' ? { width: 2.35, height: 0.68, length: 5.2 } :
-        { width: 2.7, height: 0.82, length: 4.5 };
+    const dimensions = { width: 2.7, height: 0.82, length: 4.5 };
 
     const body = new THREE.Mesh(
       new THREE.BoxGeometry(dimensions.width, dimensions.height, dimensions.length),
@@ -89,7 +90,7 @@ export class Vehicle {
     this.group.add(body);
 
     const hood = new THREE.Mesh(
-      new THREE.BoxGeometry(dimensions.width * 0.82, 0.18, style === 'arrow' ? 2.25 : 1.8),
+      new THREE.BoxGeometry(dimensions.width * 0.82, 0.18, 1.8),
       bodyMaterial
     );
     hood.position.set(0, 1.25, dimensions.length * 0.25);
@@ -97,15 +98,15 @@ export class Vehicle {
     this.group.add(hood);
     for (const x of [-0.32, 0.32]) {
       const hoodStripe = new THREE.Mesh(
-        new THREE.BoxGeometry(0.1, 0.025, style === 'arrow' ? 1.4 : 1.05),
+        new THREE.BoxGeometry(0.1, 0.025, 1.05),
         accentMaterial
       );
       hoodStripe.position.set(x, 1.35, dimensions.length * 0.27);
       this.group.add(hoodStripe);
     }
 
-    const cabinWidth = style === 'wide' ? 2.15 : style === 'arrow' ? 1.55 : 1.8;
-    const cabinLength = style === 'arrow' ? 1.75 : 1.55;
+    const cabinWidth = 1.8;
+    const cabinLength = 1.55;
     const cabinCenterZ = -0.25;
     const cabinVertices = [
       -cabinWidth / 2, 1.12, cabinCenterZ + cabinLength / 2,
@@ -144,6 +145,73 @@ export class Vehicle {
       panel.castShadow = true;
       this.group.add(panel);
     };
+    const engineStyle = this.appearance.engineStyle || 'v8';
+    const engineMaterial = new THREE.MeshStandardMaterial({
+      color: 0x30383e,
+      roughness: 0.38,
+      metalness: 0.48
+    });
+    const engineMetal = new THREE.MeshStandardMaterial({
+      color: 0x9aa7ae,
+      roughness: 0.3,
+      metalness: 0.72
+    });
+    if (engineStyle === 'supercharged') {
+      addDetail(new THREE.BoxGeometry(0.88, 0.13, 0.76), engineMaterial, [0, 1.4, 0.46]);
+      addDetail(new THREE.BoxGeometry(0.5, 0.22, 0.5), engineMetal, [0, 1.56, 0.48]);
+      addDetail(new THREE.BoxGeometry(0.64, 0.08, 0.18), trimMaterial, [0, 1.71, 0.48]);
+      for (const x of [-0.34, 0.34]) {
+        addDetail(new THREE.CylinderGeometry(0.075, 0.075, 0.12, 12), engineMetal,
+          [x, 1.49, 0.46]);
+      }
+    } else if (engineStyle === 'v8') {
+      addDetail(new THREE.BoxGeometry(0.82, 0.12, 0.68), engineMaterial, [0, 1.4, 0.46]);
+      addDetail(new THREE.BoxGeometry(0.58, 0.11, 0.38), engineMetal, [0, 1.52, 0.46]);
+      for (const side of [-1, 1]) {
+        addDetail(new THREE.BoxGeometry(0.16, 0.1, 0.48), engineMetal,
+          [side * 0.4, 1.46, 0.46]);
+      }
+    } else {
+      addDetail(new THREE.BoxGeometry(0.68, 0.09, 0.55), engineMaterial, [0, 1.38, 0.46]);
+      for (const x of [-0.2, 0, 0.2]) {
+        addDetail(new THREE.BoxGeometry(0.07, 0.12, 0.36), engineMetal,
+          [x, 1.48, 0.46]);
+      }
+    }
+
+    const exhaustStyle = this.appearance.exhaustStyle || 'dual';
+    const exhaustMetal = new THREE.MeshStandardMaterial({
+      color: 0x89949a,
+      roughness: 0.3,
+      metalness: 0.8
+    });
+    const exhaustOpening = new THREE.MeshStandardMaterial({ color: 0x14181b, roughness: 0.9 });
+    const exhaustPositions = exhaustStyle === 'single' ? [0] :
+      exhaustStyle === 'side' ? [
+        -(dimensions.width / 2 - 0.05),
+        dimensions.width / 2 - 0.05
+      ] : [-0.48, 0.48];
+    for (const x of exhaustPositions) {
+      const sidePipe = exhaustStyle === 'side';
+      const length = sidePipe ? 0.82 : 0.3;
+      const z = sidePipe ? -0.18 : -dimensions.length / 2 + length / 2 + 0.05;
+      const radius = sidePipe ? 0.05 : 0.085;
+      const pipe = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius, radius * 0.82, length, 12),
+        exhaustMetal
+      );
+      pipe.rotation.x = Math.PI / 2;
+      pipe.position.set(x, sidePipe ? 0.4 : 0.51, z);
+      pipe.castShadow = true;
+      this.group.add(pipe);
+      const opening = new THREE.Mesh(
+        new THREE.CylinderGeometry(radius * 0.68, radius * 0.68, 0.012, 12),
+        exhaustOpening
+      );
+      opening.rotation.x = Math.PI / 2;
+      opening.position.set(x, pipe.position.y, z - length / 2 - 0.008);
+      this.group.add(opening);
+    }
     const frontZ = cabinCenterZ + cabinLength / 2 + 0.012;
     const rearZ = cabinCenterZ - cabinLength / 2 - 0.012;
     const windowHalf = cabinWidth * 0.34;
@@ -214,25 +282,11 @@ export class Vehicle {
         [side * (dimensions.width / 2 + 0.025), 0.75, -0.1]);
     }
 
-    if (style !== 'apex') {
-      const spoiler = new THREE.Mesh(
-        new THREE.BoxGeometry(style === 'wide' ? 3.1 : 2.3, 0.14, 0.45),
-        accentMaterial
-      );
-      spoiler.position.set(0, 1.23, -dimensions.length * 0.48);
-      this.group.add(spoiler);
-      for (const x of [-0.85, 0.85]) {
-        const support = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.35, 0.12), accentMaterial);
-        support.position.set(x, 1.08, -dimensions.length * 0.43);
-        this.group.add(support);
-      }
-    }
-
     const wheelMaterial = new THREE.MeshStandardMaterial({ color: wheelColor, roughness: 0.85 });
     const spokeMaterial = new THREE.MeshStandardMaterial({ color: 0xc4cbd0, metalness: 0.75, roughness: 0.28 });
     const rotorMaterial = new THREE.MeshStandardMaterial({ color: 0x59636c, metalness: 0.62, roughness: 0.48 });
     const wheelX = dimensions.width / 2 - 0.12;
-    const wheelRadius = this.appearance.wheelStyle === 'classic' ? 0.45 : 0.4;
+    const wheelRadius = 0.4;
     this.wheels = [];
     for (const x of [-wheelX, wheelX]) {
       for (const z of [-1.45, 1.45]) {
@@ -307,28 +361,29 @@ export class Vehicle {
   update(dt, controls, track) {
     const throttle = controls.throttle;
     const braking = controls.brake;
-    const steeringInput = Number(controls.right) - Number(controls.left);
+    this.tailLightMaterial.emissiveIntensity = braking ? 2.2 : 0.8;
+    const steeringInput = Number(controls.left) - Number(controls.right);
     const maxSpeed = 300 / 3.6;
     if (braking) {
       this.speed = this.speed > 0.15
-        ? Math.max(0, this.speed - 32 * dt)
+        ? Math.max(0, this.speed - 18 * dt)
         : Math.max(-12, this.speed - 7 * dt);
     } else if (throttle) {
-      this.speed += 7.5 * dt;
+      this.speed += 4.5 * dt;
     } else {
       const speed = Math.abs(this.speed);
-      const drag = 0.65 + speed * speed * 0.0012;
+      const drag = 3 + speed * 0.06;
       this.speed -= Math.sign(this.speed) * Math.min(speed, drag * dt);
     }
     this.speed = THREE.MathUtils.clamp(this.speed, -12, maxSpeed);
 
     const speedFraction = Math.min(1, Math.abs(this.speed) / maxSpeed);
-    this.steering += (steeringInput - this.steering) * (1 - Math.exp(-9 * dt));
-    const turningStrength = THREE.MathUtils.lerp(0.78, 0.24, speedFraction);
-    const speedAuthority = THREE.MathUtils.clamp(Math.abs(this.speed) / 3, 0, 1);
-    this.yaw -= this.steering * Math.sign(this.speed) *
-      speedAuthority * turningStrength * dt;
-    const wheelAngle = this.steering * 0.42 * (1 - speedFraction * 0.82);
+    this.steering += (steeringInput - this.steering) * (1 - Math.exp(-7 * dt));
+    const wheelAngle = this.steering * MAX_STEERING_ANGLE * (1 - speedFraction * 0.65);
+    const requestedYawRate = -this.speed / WHEELBASE * Math.tan(wheelAngle);
+    const grip = braking ? 11.5 : 13.5;
+    const maximumYawRate = grip / Math.max(Math.abs(this.speed), 1);
+    this.yaw += THREE.MathUtils.clamp(requestedYawRate, -maximumYawRate, maximumYawRate) * dt;
     for (const wheel of this.wheels) {
       wheel.steeringPivot.rotation.y = wheel.front ? wheelAngle : 0;
       wheel.spinGroup.rotation.x -= this.speed * dt / wheel.radius;
@@ -355,6 +410,7 @@ export class Vehicle {
       this.group.rotation.set(0, -this.yaw, 0, 'YXZ');
       if (this.pos.y <= -29) this.reset(track.getSpawn().position, track.getSpawn().yaw);
     }
+    this.speed = THREE.MathUtils.clamp(this.speed, -12, maxSpeed);
     this.group.position.copy(this.pos);
     this.group.rotation.y = -this.yaw;
     this.group.updateMatrixWorld(true);
@@ -372,8 +428,7 @@ export class Vehicle {
     this.skidTimer += dt;
     if (this.skidTimer < 0.045) return;
     this.skidTimer %= 0.045;
-    const wheelX = (this.appearance.bodyStyle === 'wide' ? 3.35 :
-      this.appearance.bodyStyle === 'arrow' ? 2.35 : 2.7) / 2 - 0.12;
+    const wheelX = 2.7 / 2 - 0.12;
     for (let side = 0; side < 2; side++) {
       const point = this.group.localToWorld(new THREE.Vector3(side === 0 ? -wheelX : wheelX, 0.04, -1.45));
       const previous = this.skidPrevious[side];

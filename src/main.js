@@ -62,8 +62,8 @@ let c = { throttle: false, brake: false, left: false, right: false };
 let A = vehicle();
 let appearance = currentAppearance();
 
-function currentAppearance(style = A.bodyStyle) {
-  return { ...A.profiles[style], bodyStyle: style };
+function currentAppearance() {
+  return { ...A };
 }
 
 const fmt = t => {
@@ -438,9 +438,17 @@ function renderPreview() {
     });
   });
   ghostTrack.group.visible = true;
-  const end = ghostTrack.p.at(-1).end;
-  orbit.target.copy(startPoint).add(end).multiplyScalar(0.5);
+  const previewBounds = new THREE.Box3().setFromPoints([
+    startPoint,
+    ghostTrack.p.at(-1).end
+  ]);
+  previewBounds.getCenter(orbit.target);
   orbit.target.y = Math.max(orbit.target.y, 0);
+  orbit.radius = THREE.MathUtils.clamp(
+    previewBounds.getSize(new THREE.Vector3()).length() * 0.9 + 16,
+    38,
+    120
+  );
   updateEditorCamera();
   $('buildStatus').textContent = selectedIndex === null
     ? `Ghost preview: ${selectedPiece}. Click PLACE PIECE to add it.`
@@ -627,18 +635,18 @@ function loadVehicleProfile() {
   appearance = currentAppearance();
   $('bodyColor').value = appearance.bodyColor;
   $('accentColor').value = appearance.accentColor;
-  $('bodyStyle').value = A.bodyStyle;
   $('wheelStyle').value = appearance.wheelStyle;
+  $('engineStyle').value = appearance.engineStyle;
+  $('exhaustStyle').value = appearance.exhaustStyle;
   if (car) car.setAppearance(appearance);
 }
 
 function updateVehicleProfile() {
-  A.bodyStyle = $('bodyStyle').value;
-  A.profiles[A.bodyStyle] = {
-    bodyColor: $('bodyColor').value,
-    accentColor: $('accentColor').value,
-    wheelStyle: $('wheelStyle').value
-  };
+  A.bodyColor = $('bodyColor').value;
+  A.accentColor = $('accentColor').value;
+  A.wheelStyle = $('wheelStyle').value;
+  A.engineStyle = $('engineStyle').value;
+  A.exhaustStyle = $('exhaustStyle').value;
   appearance = currentAppearance();
   if (car) car.setAppearance(appearance);
 }
@@ -721,11 +729,7 @@ $('saveVehicle').onclick = () => {
   $('vehicleStatus').textContent = 'Vehicle appearance saved.';
 };
 
-$('bodyStyle').onchange = () => {
-  A.bodyStyle = $('bodyStyle').value;
-  loadVehicleProfile();
-};
-['bodyColor', 'accentColor', 'wheelStyle'].forEach(id => {
+['bodyColor', 'accentColor', 'wheelStyle', 'engineStyle', 'exhaustStyle'].forEach(id => {
   $(id).oninput = updateVehicleProfile;
   $(id).onchange = updateVehicleProfile;
 });
@@ -755,8 +759,10 @@ $('hudMenu').onclick = () => {
   countdownTimer = null;
   $('countdown').textContent = '';
   running = false;
+  finished = false;
   c = { throttle: false, brake: false, left: false, right: false };
-  show('menu');
+  renderTracks();
+  show('tracksScreen');
 };
 
 addEventListener('keydown', e => {

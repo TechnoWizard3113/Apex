@@ -258,6 +258,7 @@ export class Track {
       const count = STRAIGHT_STEPS * 2;
       for (let i = 0; i <= count; i++) {
         const fraction = i / count;
+        const rampTransition = fraction * fraction * (3 - 2 * fraction);
         const bank = maxBank * Math.sin(Math.PI * fraction);
         samples.push({
           position: new THREE.Vector3()
@@ -267,11 +268,15 @@ export class Track {
           bank
         });
         const position = samples.at(-1).position;
-        const inheritedOffset = rampHeight ? startOffset * (1 - fraction) : startOffset;
+        const inheritedOffset = rampHeight
+          ? startOffset * (1 - rampTransition)
+          : startOffset;
         const terrainFloor = terrainSupport(this.mountainId, position.x, position.z, yaw, bank) +
           ROAD_CLEARANCE + inheritedOffset;
-        const rampHeightAtSample = start.y + rampHeight * fraction;
-        position.y = Math.max(terrainFloor, rampHeight ? rampHeightAtSample : terrainFloor);
+        const rampHeightAtSample = start.y + rampHeight * rampTransition;
+        position.y = rampHeight
+          ? Math.max(terrainFloor, rampHeightAtSample)
+          : terrainFloor;
       }
       end.copy(samples.at(-1).position);
     }
@@ -404,19 +409,15 @@ export class Track {
         let height = mountainHeight(this.mountainId, x, z) - 0.3;
         const road = this.getTerrainRoadSurface(x, z);
         if (road && road.distance < WIDTH / 2 + step * 4) {
-          const roadUnderside = road.y - 0.16 - ROAD_THICKNESS - 0.2;
+          const roadUnderside = road.y - ROAD_THICKNESS - 0.02;
           const cutRadius = WIDTH / 2 + step * 0.35;
-          if (road.distance <= cutRadius) {
-            height = Math.min(height, roadUnderside);
-          } else {
-            const blend = THREE.MathUtils.clamp(
-              (road.distance - cutRadius) / (step * 2.8),
-              0,
-              1
-            );
-            const smoothBlend = blend * blend * (3 - 2 * blend);
-            height = Math.min(height, roadUnderside + (height - roadUnderside) * smoothBlend);
-          }
+          const blend = THREE.MathUtils.clamp(
+            (road.distance - cutRadius) / (step * 2.8),
+            0,
+            1
+          );
+          const smoothBlend = blend * blend * (3 - 2 * blend);
+          height = roadUnderside + (height - roadUnderside) * smoothBlend;
         }
         const slopeX = (mountainHeight(this.mountainId, x + 2, z) -
           mountainHeight(this.mountainId, x - 2, z)) / 4;
@@ -432,6 +433,44 @@ export class Track {
           const a = row * (divisions + 1) + column;
           const b = a + divisions + 1;
           indices.push(a, b, a + 1, a + 1, b, b + 1);
+        }
+      }
+    }
+    const keepTerrainBelowRoad = (x, z, roadBottom) => {
+      const gridX = (x + size / 2) / step;
+      const gridZ = (z + size / 2) / step;
+      const column = THREE.MathUtils.clamp(Math.floor(gridX), 0, divisions - 1);
+      const row = THREE.MathUtils.clamp(Math.floor(gridZ), 0, divisions - 1);
+      const u = THREE.MathUtils.clamp(gridX - column, 0, 1);
+      const v = THREE.MathUtils.clamp(gridZ - row, 0, 1);
+      const a = row * (divisions + 1) + column;
+      const b = a + divisions + 1;
+      const triangle = u + v <= 1
+        ? [[a, 1 - u - v], [b, v], [a + 1, u]]
+        : [[a + 1, 1 - v], [b, 1 - u], [b + 1, u + v - 1]];
+      const terrainHeight = triangle.reduce(
+        (height, [index, weight]) => height + vertices[index * 3 + 1] * weight,
+        0
+      );
+      if (terrainHeight <= roadBottom) return;
+      const correction = terrainHeight - roadBottom;
+      for (const [index] of triangle) vertices[index * 3 + 1] -= correction;
+    };
+    for (const segment of this.surfaceSegments) {
+      const dx = segment.end.x - segment.start.x;
+      const dz = segment.end.z - segment.start.z;
+      const count = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.5));
+      for (let i = 0; i <= count; i++) {
+        const fraction = i / count;
+        const centerX = segment.start.x + dx * fraction;
+        const centerY = segment.start.y + (segment.end.y - segment.start.y) * fraction;
+        const centerZ = segment.start.z + dz * fraction;
+        for (let lateral = -WIDTH / 2; lateral <= WIDTH / 2; lateral += 0.5) {
+          const x = centerX - Math.cos(segment.yaw) * lateral;
+          const z = centerZ - Math.sin(segment.yaw) * lateral;
+          const roadBottom = centerY - lateral * Math.tan(segment.bank) +
+            0.16 - ROAD_THICKNESS - 0.02;
+          keepTerrainBelowRoad(x, z, roadBottom);
         }
       }
     }
