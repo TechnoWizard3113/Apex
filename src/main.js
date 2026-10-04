@@ -21,7 +21,7 @@ const tracks = [
     name: 'Speed Circuit',
     desc: 'High speed test track',
     mountain: 'glacier',
-    p: ['start', 'straight', 'straight', 'curveLeft', 'checkpoint', 'ramp', 'straight', 'curveRight', 'rampDown', 'straight', 'checkpoint', 'curveRight', 'straight', 'bankLeft', 'straight', 'curveLeft', 'finish']
+    p: ['start', 'straight', 'straight', 'curveLeft', 'checkpoint', 'ramp', 'ramp', 'straight', 'curveRight', 'rampDown', 'straight', 'checkpoint', 'curveRight', 'straight', 'bankLeft', 'straight', 'curveLeft', 'finish']
   }
 ];
 
