@@ -237,7 +237,7 @@ export class Track {
     let endYaw = yaw;
 
     if (type === 'curveLeft' || type === 'curveRight') {
-      const direction = type === 'curveLeft' ? -1 : 1;
+      const direction = type === 'curveLeft' ? 1 : -1;
       for (let i = 0; i <= CURVE_STEPS; i++) {
         const angle = i / CURVE_STEPS * Math.PI / 2;
         const position = start.clone()

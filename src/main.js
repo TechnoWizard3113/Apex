@@ -245,7 +245,7 @@ function race(t) {
   c = { throttle: false, brake: false, left: false, right: false };
   let sp = track.getSpawn();
   car.reset(sp.position, sp.yaw);
-  follow.update(car, 1);
+  follow.reset(car, track);
   active = t;
   ci = 0;
   finished = false;
@@ -317,7 +317,7 @@ function loop(now) {
       if (d2d < 6 && Math.abs(car.pos.y - fin.y) < 10) finish();
     }
 
-    follow.update(car, dt);
+    follow.update(car, dt, track);
   }
 
   $('speed').classList.toggle('hidden', !S.showSpeed);
@@ -783,7 +783,7 @@ addEventListener('keydown', e => {
       const position = ci > 0 ? new THREE.Vector3(point.x, point.y, point.z) : point.position;
       car.reset(position, point.yaw);
       c = { throttle: false, brake: false, left: false, right: false };
-      follow.update(car, 1);
+      follow.reset(car, track);
       return;
     }
     if (e.key === 'ArrowUp' || k === 'w') c.throttle = true;
