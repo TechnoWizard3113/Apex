@@ -488,7 +488,10 @@ function exportTrackCode() {
 
 function importTrackCode() {
   const code = $('trackCode').value.trim();
-  const allowed = new Set(['start', 'straight', 'curveLeft', 'curveRight', 'ramp', 'rampDown', 'bankLeft', 'bankRight', 'checkpoint', 'finish']);
+  const allowed = new Set([
+    'start', 'straight', 'curveLeft', 'curveRight', 'curveLeft45', 'curveRight45',
+    'ramp', 'rampDown', 'bankLeft', 'bankRight', 'checkpoint', 'finish'
+  ]);
   let mountain = 'everfrost';
   let types = [];
   if (code.startsWith('APX2-')) {

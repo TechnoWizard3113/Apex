@@ -11,8 +11,8 @@ const STRAIGHT_STEPS = 16;
 const BARRIER_HEIGHT = 1.1;
 const BANK_ANGLE = 0.18;
 const PIECES = new Set([
-  'start', 'straight', 'curveLeft', 'curveRight', 'ramp', 'rampDown', 'bankLeft',
-  'bankRight', 'checkpoint', 'finish'
+  'start', 'straight', 'curveLeft', 'curveRight', 'curveLeft45', 'curveRight45',
+  'ramp', 'rampDown', 'bankLeft', 'bankRight', 'checkpoint', 'finish'
 ]);
 const MOUNTAINS = new Set(['everfrost', 'glacier', 'whitefang', 'stormpeak']);
 
@@ -236,10 +236,11 @@ export class Track {
     const end = start.clone();
     let endYaw = yaw;
 
-    if (type === 'curveLeft' || type === 'curveRight') {
-      const direction = type === 'curveLeft' ? 1 : -1;
+    if (type.startsWith('curve')) {
+      const direction = type === 'curveLeft' || type === 'curveLeft45' ? 1 : -1;
+      const turnAngle = type.endsWith('45') ? Math.PI / 4 : Math.PI / 2;
       for (let i = 0; i <= CURVE_STEPS; i++) {
-        const angle = i / CURVE_STEPS * Math.PI / 2;
+        const angle = i / CURVE_STEPS * turnAngle;
         const position = start.clone()
           .addScaledVector(right(yaw), direction * RADIUS * (1 - Math.cos(angle)))
           .addScaledVector(forward(yaw), RADIUS * Math.sin(angle));
@@ -252,13 +253,13 @@ export class Track {
         });
       }
       end.copy(samples.at(-1).position);
-      endYaw += direction * Math.PI / 2;
+      endYaw += direction * turnAngle;
     } else {
       const rampHeight = type === 'ramp' ? 9 : type === 'rampDown' ? -9 : 0;
       const count = STRAIGHT_STEPS * 2;
       for (let i = 0; i <= count; i++) {
         const fraction = i / count;
-        const rampTransition = fraction * fraction * (3 - 2 * fraction);
+        const rampTransition = fraction ** 3 * (fraction * (fraction * 6 - 15) + 10);
         const bank = maxBank * Math.sin(Math.PI * fraction);
         samples.push({
           position: new THREE.Vector3()
@@ -273,10 +274,7 @@ export class Track {
           : startOffset;
         const terrainFloor = terrainSupport(this.mountainId, position.x, position.z, yaw, bank) +
           ROAD_CLEARANCE + inheritedOffset;
-        const rampHeightAtSample = start.y + rampHeight * rampTransition;
-        position.y = rampHeight
-          ? Math.max(terrainFloor, rampHeightAtSample)
-          : terrainFloor;
+        position.y = terrainFloor + rampHeight * rampTransition;
       }
       end.copy(samples.at(-1).position);
     }
@@ -371,6 +369,18 @@ export class Track {
       marker.rotation.y = -yaw;
       marker.userData.trackPieceIndex = pieceIndex;
       this.group.add(marker);
+      const back = new THREE.Mesh(
+        new THREE.BoxGeometry(WIDTH, BARRIER_HEIGHT, 0.55),
+        this.barrierMaterial
+      );
+      back.position.copy(start)
+        .addScaledVector(forward(yaw), -0.12);
+      back.position.y += BARRIER_HEIGHT / 2 + 0.16;
+      back.rotation.y = -yaw;
+      back.castShadow = true;
+      back.receiveShadow = true;
+      back.userData.trackPieceIndex = pieceIndex;
+      this.group.add(back);
     } else if (type === 'finish') {
       const finishPosition = samples.at(-1);
       this.finish.copy(finishPosition.position);
@@ -615,11 +625,32 @@ export class Track {
   }
 
   constrainVehicle(position) {
+    let hitStartBarrier = false;
+    const startPiece = this.p[0];
+    if (startPiece?.type === 'start') {
+      const startForward = forward(startPiece.yaw);
+      const startRight = right(startPiece.yaw);
+      const offsetX = position.x - startPiece.start.x;
+      const offsetZ = position.z - startPiece.start.z;
+      const longitudinal = offsetX * startForward.x + offsetZ * startForward.z;
+      const lateral = offsetX * startRight.x + offsetZ * startRight.z;
+      if (longitudinal <= 1.92 && Math.abs(lateral) < WIDTH / 2 + 1.35) {
+        hitStartBarrier = true;
+        if (longitudinal < 1.9) position.addScaledVector(startForward, 1.9 - longitudinal);
+      }
+    }
     const surface = this.getSurfaceAt(position.x, position.z, position.y);
     const groundY = this.getTerrainHeight(position.x, position.z);
     if (!surface || surface.distance > WIDTH / 2 + 5 ||
         Math.abs(groundY - position.y) < Math.abs(surface.y - position.y)) {
-      return { onTrack: true, hitBarrier: false, y: groundY, pitch: 0, bank: 0 };
+      return {
+        onTrack: true,
+        hitBarrier: false,
+        hitStartBarrier,
+        y: groundY,
+        pitch: 0,
+        bank: 0
+      };
     }
 
     const maxLateral = WIDTH / 2 - 2;
@@ -634,6 +665,7 @@ export class Track {
     return {
       onTrack: true,
       hitBarrier,
+      hitStartBarrier,
       y: constrainedSurface?.y ?? surface.y,
       pitch: constrainedSurface?.pitch ?? surface.pitch,
       bank: constrainedSurface?.bank ?? surface.bank

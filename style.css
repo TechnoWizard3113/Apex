@@ -295,6 +295,14 @@ h1 {
   clip-path: polygon(0 0, 100% 0, 100% 100%, 32% 100%, 32% 42%, 0 42%);
 }
 
+.piecegrid button[data-piece="curveLeft45"]::before {
+  background-image: linear-gradient(45deg, transparent 46%, #dce8ee 46%, #dce8ee 52%, transparent 52%);
+}
+
+.piecegrid button[data-piece="curveRight45"]::before {
+  background-image: linear-gradient(-45deg, transparent 46%, #dce8ee 46%, #dce8ee 52%, transparent 52%);
+}
+
 .piecegrid button[data-piece="ramp"]::before {
   background-color: #745d9e;
   transform: skewY(-13deg);

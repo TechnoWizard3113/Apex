@@ -362,17 +362,17 @@ export class Vehicle {
     const throttle = controls.throttle;
     const braking = controls.brake;
     this.tailLightMaterial.emissiveIntensity = braking ? 2.2 : 0.8;
-    const steeringInput = Number(controls.left) - Number(controls.right);
+    const steeringInput = Number(controls.right) - Number(controls.left);
     const maxSpeed = 300 / 3.6;
     if (braking) {
       this.speed = this.speed > 0.15
         ? Math.max(0, this.speed - 18 * dt)
         : Math.max(-12, this.speed - 7 * dt);
     } else if (throttle) {
-      this.speed += 4.5 * dt;
+      this.speed += 3.2 * dt;
     } else {
       const speed = Math.abs(this.speed);
-      const drag = 3 + speed * 0.06;
+      const drag = 5 + speed * 0.12;
       this.speed -= Math.sign(this.speed) * Math.min(speed, drag * dt);
     }
     this.speed = THREE.MathUtils.clamp(this.speed, -12, maxSpeed);
@@ -396,6 +396,8 @@ export class Vehicle {
       this.pos.y = surface.y;
       this.pitch = surface.pitch || 0;
       this.speed -= Math.sin(this.pitch) * 9.81 * dt;
+      if (surface.hitStartBarrier &&
+          (this.speed < 0 || (!throttle && this.speed < 0.1))) this.speed = 0;
       this.speed = THREE.MathUtils.clamp(this.speed, -12, maxSpeed);
       this.group.rotation.set(
         -this.pitch,
