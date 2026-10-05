@@ -10,6 +10,7 @@ const CURVE_STEPS = 48;
 const STRAIGHT_STEPS = 16;
 const BARRIER_HEIGHT = 1.1;
 const BANK_ANGLE = 0.18;
+const ROAD_RECOVERY_MARGIN = 1.25;
 const PIECES = new Set([
   'start', 'straight', 'curveLeft', 'curveRight', 'curveLeft45', 'curveRight45',
   'ramp', 'rampDown', 'bankLeft', 'bankRight', 'checkpoint', 'finish'
@@ -642,7 +643,7 @@ export class Track {
     const surface = this.getSurfaceAt(position.x, position.z, position.y);
     const groundY = this.getTerrainHeight(position.x, position.z);
     if (!surface || surface.distance > WIDTH / 2 + 5 ||
-        Math.abs(groundY - position.y) < Math.abs(surface.y - position.y)) {
+        Math.abs(groundY - position.y) + ROAD_RECOVERY_MARGIN < Math.abs(surface.y - position.y)) {
       return {
         onTrack: true,
         hitBarrier: false,

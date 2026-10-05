@@ -1,7 +1,7 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 
 const WHEELBASE = 2.9;
-const MAX_STEERING_ANGLE = 0.42;
+const MAX_STEERING_ANGLE = 0.54;
 
 export class Vehicle {
   constructor(scene, appearance) {
@@ -22,17 +22,25 @@ export class Vehicle {
     this.maxSkidSegments = 1200;
     for (let side = 0; side < 2; side++) {
       const geometry = new THREE.BufferGeometry();
-      const positions = new Float32Array(this.maxSkidSegments * 6);
+      const positions = new Float32Array(this.maxSkidSegments * 18);
       const attribute = new THREE.BufferAttribute(positions, 3);
       attribute.setUsage(THREE.DynamicDrawUsage);
       geometry.setAttribute('position', attribute);
-      const line = new THREE.LineSegments(
+      const mark = new THREE.Mesh(
         geometry,
-        new THREE.LineBasicMaterial({ color: 0x25282b, transparent: true, opacity: 0.7 })
+        new THREE.MeshBasicMaterial({
+          color: 0x25282b,
+          transparent: true,
+          opacity: 0.7,
+          depthWrite: false,
+          side: THREE.DoubleSide,
+          polygonOffset: true,
+          polygonOffsetFactor: -1
+        })
       );
-      line.frustumCulled = false;
-      this.scene.add(line);
-      this.skidGeometries.push({ geometry, attribute, line });
+      mark.frustumCulled = false;
+      this.scene.add(mark);
+      this.skidGeometries.push({ geometry, attribute, mark });
     }
     this.build();
   }
@@ -287,9 +295,13 @@ export class Vehicle {
     const rotorMaterial = new THREE.MeshStandardMaterial({ color: 0x59636c, metalness: 0.62, roughness: 0.48 });
     const wheelX = dimensions.width / 2 - 0.12;
     const wheelRadius = 0.4;
+    const wheelWidth = 0.3;
+    this.wheelX = wheelX;
+    this.rearWheelZ = -1.45;
+    this.tireWidth = wheelWidth;
     this.wheels = [];
     for (const x of [-wheelX, wheelX]) {
-      for (const z of [-1.45, 1.45]) {
+      for (const z of [this.rearWheelZ, 1.45]) {
         const side = Math.sign(x);
         const steeringPivot = new THREE.Group();
         steeringPivot.position.set(x, 0, z);
@@ -298,7 +310,7 @@ export class Vehicle {
         spinGroup.position.y = wheelRadius;
         steeringPivot.add(spinGroup);
         const wheel = new THREE.Mesh(
-          new THREE.CylinderGeometry(wheelRadius, wheelRadius, 0.3, 20),
+          new THREE.CylinderGeometry(wheelRadius, wheelRadius, wheelWidth, 20),
           wheelMaterial
         );
         wheel.rotation.z = Math.PI / 2;
@@ -362,26 +374,26 @@ export class Vehicle {
     const throttle = controls.throttle;
     const braking = controls.brake;
     this.tailLightMaterial.emissiveIntensity = braking ? 2.2 : 0.8;
-    const steeringInput = Number(controls.right) - Number(controls.left);
+    const steeringInput = Number(controls.left) - Number(controls.right);
     const maxSpeed = 300 / 3.6;
     if (braking) {
       this.speed = this.speed > 0.15
         ? Math.max(0, this.speed - 18 * dt)
         : Math.max(-12, this.speed - 7 * dt);
     } else if (throttle) {
-      this.speed += 3.2 * dt;
+      this.speed += 1.8 * dt;
     } else {
       const speed = Math.abs(this.speed);
-      const drag = 5 + speed * 0.12;
+      const drag = 7 + speed * 0.18;
       this.speed -= Math.sign(this.speed) * Math.min(speed, drag * dt);
     }
     this.speed = THREE.MathUtils.clamp(this.speed, -12, maxSpeed);
 
     const speedFraction = Math.min(1, Math.abs(this.speed) / maxSpeed);
-    this.steering += (steeringInput - this.steering) * (1 - Math.exp(-7 * dt));
-    const wheelAngle = this.steering * MAX_STEERING_ANGLE * (1 - speedFraction * 0.65);
+    this.steering += (steeringInput - this.steering) * (1 - Math.exp(-9 * dt));
+    const wheelAngle = this.steering * MAX_STEERING_ANGLE * (1 - speedFraction * 0.5);
     const requestedYawRate = -this.speed / WHEELBASE * Math.tan(wheelAngle);
-    const grip = braking ? 11.5 : 13.5;
+    const grip = braking ? 13 : 16;
     const maximumYawRate = grip / Math.max(Math.abs(this.speed), 1);
     this.yaw += THREE.MathUtils.clamp(requestedYawRate, -maximumYawRate, maximumYawRate) * dt;
     for (const wheel of this.wheels) {
@@ -395,7 +407,7 @@ export class Vehicle {
     if (surface.onTrack) {
       this.pos.y = surface.y;
       this.pitch = surface.pitch || 0;
-      this.speed -= Math.sin(this.pitch) * 9.81 * dt;
+      this.speed -= Math.sin(this.pitch) * 8.2 * dt;
       if (surface.hitStartBarrier &&
           (this.speed < 0 || (!throttle && this.speed < 0.1))) this.speed = 0;
       this.speed = THREE.MathUtils.clamp(this.speed, -12, maxSpeed);
@@ -430,20 +442,46 @@ export class Vehicle {
     this.skidTimer += dt;
     if (this.skidTimer < 0.045) return;
     this.skidTimer %= 0.045;
-    const wheelX = 2.7 / 2 - 0.12;
+    const up = new THREE.Vector3(0, 1, 0);
     for (let side = 0; side < 2; side++) {
-      const point = this.group.localToWorld(new THREE.Vector3(side === 0 ? -wheelX : wheelX, 0.04, -1.45));
+      const point = this.group.localToWorld(new THREE.Vector3(
+        side === 0 ? -this.wheelX : this.wheelX,
+        0.04,
+        this.rearWheelZ
+      ));
       const previous = this.skidPrevious[side];
       this.skidPrevious[side] = point.clone();
       if (!previous) continue;
       const data = this.skidGeometries[side];
       const segment = this.skidSegments[side] % this.maxSkidSegments;
-      const offset = segment * 6;
-      data.attribute.array.set([previous.x, previous.y, previous.z, point.x, point.y, point.z], offset);
+      const direction = point.clone().sub(previous);
+      direction.y = 0;
+      if (direction.lengthSq() < 1e-8) continue;
+      const halfWidth = this.tireWidth / 2;
+      const lateral = new THREE.Vector3()
+        .crossVectors(direction.normalize(), up)
+        .multiplyScalar(halfWidth);
+      const previousLeft = previous.clone().add(lateral);
+      const previousRight = previous.clone().sub(lateral);
+      const pointLeft = point.clone().add(lateral);
+      const pointRight = point.clone().sub(lateral);
+      const offset = segment * 18;
+      data.attribute.array.set([
+        previousLeft.x, previousLeft.y, previousLeft.z,
+        previousRight.x, previousRight.y, previousRight.z,
+        pointLeft.x, pointLeft.y, pointLeft.z,
+        pointLeft.x, pointLeft.y, pointLeft.z,
+        previousRight.x, previousRight.y, previousRight.z,
+        pointRight.x, pointRight.y, pointRight.z
+      ], offset);
       data.attribute.needsUpdate = true;
       this.skidSegments[side] = Math.min(this.skidSegments[side] + 1, this.maxSkidSegments);
-      data.geometry.setDrawRange(0, this.skidSegments[side] * 2);
+      data.geometry.setDrawRange(0, this.skidSegments[side] * 6);
     }
+  }
+
+  setSkidsVisible(visible) {
+    for (const data of this.skidGeometries) data.mark.visible = visible;
   }
 
   clearSkids() {

@@ -8,6 +8,50 @@ import {
 } from './storage.js';
 
 const $ = x => document.getElementById(x);
+const menuMusicTracks = [
+  './Music/Menu.mp3',
+  './Music/Bogart VGM - Scifi Main Theme_ Menu.mp3',
+  './Music/pulse.mp3',
+  './Music/Beyond The Rings.mp3'
+];
+
+const menuMusic = (() => {
+  const audio = new Audio();
+  audio.preload = 'auto';
+  audio.volume = 0.18;
+  let index = 0;
+
+  const setTrack = () => {
+    audio.src = menuMusicTracks[index];
+    audio.load();
+  };
+
+  const play = () => {
+    if (document.visibilityState === 'hidden' || !$('game').classList.contains('hidden')) {
+      audio.pause();
+      return;
+    }
+    if (!audio.src || audio.src !== new URL(menuMusicTracks[index], window.location.href).href) {
+      setTrack();
+    }
+    audio.play().catch(() => {});
+  };
+
+  const pause = () => {
+    audio.pause();
+  };
+
+  audio.addEventListener('ended', () => {
+    index = (index + 1) % menuMusicTracks.length;
+    setTrack();
+    if (document.visibilityState !== 'hidden' && $('game').classList.contains('hidden')) {
+      audio.play().catch(() => {});
+    }
+  });
+
+  return { play, pause, setTrack };
+})();
+
 const tracks = [
   {
     id: 'mountain',
@@ -75,11 +119,24 @@ const fmt = t => {
 function show(id) {
   ['menu', 'tracksScreen', 'leaderScreen', 'builderScreen', 'vehicleScreen', 'settingsScreen'].forEach(x => $(x).classList.add('hidden'));
   $(id).classList.remove('hidden');
+  if (id === 'game') {
+    menuMusic.pause();
+  } else {
+    menuMusic.play();
+  }
   if (renderer) requestAnimationFrame(() => {
     resizeRenderer(renderer.domElement.parentElement);
     updateEditorCamera();
   });
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden' || !$('game').classList.contains('hidden')) {
+    menuMusic.pause();
+  } else {
+    menuMusic.play();
+  }
+});
 
 function resizeRenderer(container) {
   if (!renderer || !container) return;
@@ -237,6 +294,7 @@ function race(t) {
   init('gameView');
   clearPreview();
   editorMode = 'race';
+  car.setSkidsVisible(true);
   track.group.visible = true;
   car.group.visible = true;
   showroom.visible = false;
@@ -601,6 +659,8 @@ function deleteSelectedPiece() {
 
 function openBuilder(saved = null) {
   init('builderView');
+  car.clearSkids();
+  car.setSkidsVisible(false);
   editingTrackId = saved?.id || null;
   selectedMountain = saved?.mountain || customMountain();
   $('mountain').value = selectedMountain;
@@ -626,6 +686,8 @@ function openBuilder(saved = null) {
 
 function vehicleUI() {
   init('vehicleView');
+  car.clearSkids();
+  car.setSkidsVisible(false);
   car.reset(new THREE.Vector3(0, 0, 0), 0);
   track.group.visible = false;
   car.group.visible = true;
@@ -823,3 +885,5 @@ addEventListener('resize', () => {
 addEventListener('blur', () => {
   c = { throttle: false, brake: false, left: false, right: false };
 });
+
+menuMusic.play();
