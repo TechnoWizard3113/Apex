@@ -67,6 +67,13 @@ const tracks = [
     mountain: 'glacier',
     p: ['start', 'straight', 'straight', 'curveLeft', 'checkpoint', 'ramp', 'ramp', 'straight', 'curveRight', 'rampDown', 'straight', 'checkpoint', 'curveRight', 'straight', 'bankLeft', 'straight', 'curveLeft', 'finish']
   }
+  {
+    id: 'race',
+    name: 'Racing dream',
+    desc: 'Downhill',
+    mountain: 'everfrost',
+    p: ['start', 'curveLeft45', 'curveLeft45', 'curveLeft45', 'straight', 'ramp', 'ramp', 'ramp', 'rampDown', 'bankLeft', 'curveRight45', 'curveRight45', 'curveRight45', 'straight', 'checkpoint', 'straight', 'straight', 'checkpoint', 'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'rampDown', 'checkpoint', 'curveLeft', 'curveLeft', 'bankRight', 'finish']
+  }
 ];
 
 let S = settings(),
