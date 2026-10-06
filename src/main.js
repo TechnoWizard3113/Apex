@@ -69,7 +69,7 @@ const tracks = [
   }
   {
     id: 'race',
-    name: 'Racing dream',
+    name: "Racer's Dream",
     desc: 'Downhill',
     mountain: 'everfrost',
     p: ['start', 'curveLeft45', 'curveLeft45', 'curveLeft45', 'straight', 'ramp', 'ramp', 'ramp', 'rampDown', 'bankLeft', 'curveRight45', 'curveRight45', 'curveRight45', 'straight', 'checkpoint', 'straight', 'straight', 'checkpoint', 'straight', 'straight', 'straight', 'straight', 'straight', 'straight', 'rampDown', 'checkpoint', 'curveLeft', 'curveLeft', 'bankRight', 'finish']
