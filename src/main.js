@@ -66,7 +66,7 @@ const tracks = [
     desc: 'High speed test track',
     mountain: 'glacier',
     p: ['start', 'straight', 'straight', 'curveLeft', 'checkpoint', 'ramp', 'ramp', 'straight', 'curveRight', 'rampDown', 'straight', 'checkpoint', 'curveRight', 'straight', 'bankLeft', 'straight', 'curveLeft', 'finish']
-  }
+  },
   {
     id: 'race',
     name: "Racer's Dream",
